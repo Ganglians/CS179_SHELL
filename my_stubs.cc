@@ -453,6 +453,10 @@ int my_pread( int fh, char *buf, size_t size, off_t offset ) {
 
         File temp = *it;
 
+        if(S_ISDIR(temp.metadata.st_mode) || !(metadata.st_mode & S_IRUSR)){
+            return an_err;
+        }
+
         string data = temp.data;
 
         int bytes_read = 0;
@@ -470,7 +474,44 @@ int my_pread( int fh, char *buf, size_t size, off_t offset ) {
 
 // called at line #439 of bbfs.c  Note that our firt arg is an fh not an fd
 int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
-  return an_err;
+
+    if(size == 0){
+        return an_err;
+    }
+
+    map<ino_t, File>::iterator it = ilist[fh];
+
+    if(it != ilist.end()){
+
+        File temp = *it;
+
+        if(S_ISDIR(temp.metadata.st_mode) || !(metadata.st_mode & S_IWUSR)){
+            return an_err;
+        }
+
+        string data = temp.data;
+
+        if(offset < 0 || offset >= data.size()){
+            return an_err;
+        }
+
+        string first_half = data.substr(0, offset);
+
+        string second_half = "";
+
+        if(offset + size < data.size()){
+            second_half = data.substr(offset + size);
+        }
+
+        string buff(buf, buf + size);
+
+        *it->data = first_half + buff + second_half;
+
+        return size;
+
+    }
+ 
+    return an_err;
 }  
 
 // called at line #463 of bbfs.c
