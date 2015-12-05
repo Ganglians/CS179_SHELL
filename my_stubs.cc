@@ -42,8 +42,8 @@ c#include <sys/xattr.h>
 // C stuff
 #include "my_stubs.H"
 //#include <fs.h>
-#include </usr/include/cygwin/fs.h>
-//#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
+//#include </usr/include/cygwin/fs.h>
+#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
 #include <sys/stat.h>  // this has our official definition of stat
 #include <dirent.h>    // this has our official definition of dirent
 #include <errno.h>
@@ -447,9 +447,9 @@ int my_pread( int fh, char *buf, size_t size, off_t offset ) {
         return an_err;
     }
 
-    map<ino_t, File>::iterator it = ilist[fh];
+    map<ino_t, File>::iterator it = ilist.entry[fh];
 
-    if(it != ilist.end()){
+    if(it != ilist.entry.end()){
 
         File temp = *it;
 
@@ -479,9 +479,9 @@ int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
         return an_err;
     }
 
-    map<ino_t, File>::iterator it = ilist[fh];
+    map<ino_t, File>::iterator it = ilist.entry[fh];
 
-    if(it != ilist.end()){
+    if(it != ilist.entry.end()){
 
         File temp = *it;
 
