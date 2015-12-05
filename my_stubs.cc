@@ -443,6 +443,21 @@ int my_open( const char *path, int flags ) {
 // called at line #411 of bbfs.c  Note that our first arg is an fh not an fd
 int my_pread( int fh, char *buf, size_t size, off_t offset ) {
 
+    map<ino_t, File>::iterator it = ilist[fh];
+
+    if(it != ilist.end()){
+
+        File temp = *it;
+
+        string data = temp.data;
+
+        for(int i = offset; i < offset + size && i < data.size(); i++){
+            buf[i - offset] = data.at(i);
+        }
+
+        return 0;
+    }
+
     return an_err;
 }  
 
