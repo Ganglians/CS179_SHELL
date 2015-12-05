@@ -69,13 +69,6 @@ using namespace std;
 
 const int DELETED = INT_MAX;
 
-// Prototypes for local functions.  There's no need to put these into
-// my_stubs.H, since these functions are local to my_stubs.cc.
-void show_stat( struct stat& root );
-void initialize();                  
-ino_t find_ino( string path );      
-
-
 // Here is a convenient macro for debugging.  cdbg works like cerr but 
 // prefixes the error message with its location: line number and function
 // name.
@@ -83,6 +76,17 @@ ino_t find_ino( string path );
 
 map< ino_t,int > open_files;
 string cwd;   // to hold name of current working directory but not used yet.
+
+// Function prototypes
+inline vector<string> split(const string s, const string pat );
+ino_t lookup( string name, ino_t fh );
+MY_DIR* fopendir( ino_t fh );
+
+// Prototypes for local functions.  There's no need to put these into
+// my_stubs.H, since these functions are local to my_stubs.cc.
+void show_stat( struct stat& root );
+void initialize();                  
+ino_t find_ino( string path );      
 
 struct dirent_frame { // The official definition of dirent puts its users
   // into "undefined behavior"
@@ -109,6 +113,48 @@ public:
     return count++;
   }
 } ilist; 
+
+// Helper functions
+ino_t find_ino( string path ) {
+
+  //cdbg << "find_ino() has been called with path \"" << path << "\"\n"; 
+  vector<string> v = split( path, "/" );  // The members of v are "segments."
+  // Here are the exact details concerning path resolution:
+  // http://manpages.ubuntu.com/manpages/lucid/en/man7/path_resolution.7.html
+
+  // The plan: if the initial segment is not null prepend the full
+  // pathname for the current working directory to path and start
+  // over.  Process out segments of the form"." or ".." (along with
+  // its predecessor).  Delete any other null segments.  Among other
+  // things, we want the path name "/" to designate the root
+  // directory.
+
+  if ( v[0] != "" ) path = cwd + "/" + path;  // cwd == "" for now
+  ino_t fh = 2;    // I've read that 2 is the ino of a filesystem's 
+                   // root directory.  
+  for ( vector<string>::iterator it = v.begin() ; it != v.end(); it++) {
+    if ( (*it) == "" ) {
+       continue;                  // ignore null segments.
+    } else if ( ilist.entry.count(fh) == 0 ) {  // no such directory
+      cdbg << "no such entry as " << *it << " in " << path << endl;
+      errno = ENOENT;
+      fh = 0;
+      break;
+    } else if ( S_ISDIR(ilist.entry[fh].metadata.st_mode) ) {
+      //cdbg << "lookup(" << it << "," << fh << ") yields ...";
+      fh = lookup( *it, fh );
+      // cerr << "yields ... this value " << fh << endl;
+    } else {
+      cdbg << "In " << path <<  ", " << *it << " is not a directory \n";
+      // errno = ENOTDIR;
+      fh = 0;
+      break;   
+    }
+    //cdbg << v[i] << " " << fh << end;
+  } 
+  // cdbg << "and is returning " << fh << endl;
+  return fh;
+} 
 
 void initialize() { // now called from main() but could be called from
                     // Ilist constructor (I think).
@@ -453,6 +499,22 @@ int my_access( const char *fpath, int mask ) {
 
 // called at line #856 of bbfs.c
 int my_creat( const char *fpath, mode_t mode ) {
+    ino_t fHandle = find_ino(fpath);
+    if(fHandle == 0) {
+        // Success message and path to file
+        cout << "File created successfully\n";
+        cout << "Path: " << fpath << endl;
+        mode_t m = (S_IFREG | mode);
+        dev_t  d = 100; // Arbitrary selection 
+        int    n = my_mknod(fpath, m, d); 
+
+        return n; // Return nod
+    }
+    else { // File already exists
+       cout << "Error: file exists\n";
+       cout << "Path: " << fpath << endl;
+       // return an_err;
+    }
     return 0;
 }  
 
@@ -533,49 +595,6 @@ ino_t lookup( string name, ino_t fh ) {
   my_closedir(dirp);  // close MY_DIR asap, to reset internal data
   return 0;  // name-not-found
 }  
-
-
-ino_t find_ino( string path ) {
-
-  //cdbg << "find_ino() has been called with path \"" << path << "\"\n"; 
-  vector<string> v = split( path, "/" );  // The members of v are "segments."
-  // Here are the exact details concerning path resolution:
-  // http://manpages.ubuntu.com/manpages/lucid/en/man7/path_resolution.7.html
-
-  // The plan: if the initial segment is not null prepend the full
-  // pathname for the current working directory to path and start
-  // over.  Process out segments of the form"." or ".." (along with
-  // its predecessor).  Delete any other null segments.  Among other
-  // things, we want the path name "/" to designate the root
-  // directory.
-
-  if ( v[0] != "" ) path = cwd + "/" + path;  // cwd == "" for now
-  ino_t fh = 2;    // I've read that 2 is the ino of a filesystem's 
-                   // root directory.  
-  for ( vector<string>::iterator it = v.begin() ; it != v.end(); it++) {
-    if ( (*it) == "" ) {
-       continue;                  // ignore null segments.
-    } else if ( ilist.entry.count(fh) == 0 ) {  // no such directory
-      cdbg << "no such entry as " << *it << " in " << path << endl;
-      errno = ENOENT;
-      fh = 0;
-      break;
-    } else if ( S_ISDIR(ilist.entry[fh].metadata.st_mode) ) {
-      //cdbg << "lookup(" << it << "," << fh << ") yields ...";
-      fh = lookup( *it, fh );
-      // cerr << "yields ... this value " << fh << endl;
-    } else {
-      cdbg << "In " << path <<  ", " << *it << " is not a directory \n";
-      // errno = ENOTDIR;
-      fh = 0;
-      break;   
-    }
-    //cdbg << v[i] << " " << fh << end;
-  } 
-  // cdbg << "and is returning " << fh << endl;
-  return fh;
-} 
-
 
 File* find_file( ino_t ino ) { // could improve readability of code
   return & ilist.entry[ino];
