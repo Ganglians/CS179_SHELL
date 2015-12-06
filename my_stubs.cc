@@ -32,6 +32,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include<limits.h>
 
 
 #ifdef HAVE_SYS_XATTR_H
@@ -42,8 +43,8 @@ c#include <sys/xattr.h>
 // C stuff
 #include "my_stubs.H"
 //#include <fs.h>
-#include </usr/include/cygwin/fs.h>
-//#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
+//#include </usr/include/cygwin/fs.h>
+#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
 #include <sys/stat.h>  // this has our official definition of stat
 #include <dirent.h>    // this has our official definition of dirent
 #include <errno.h>
@@ -518,7 +519,7 @@ struct dirent_frame erase_path(const char* path){
 	
 	struct dirent_frame erased; 
 
-	for(; it_v != df.end(); it_v){
+	for(; it_v != df.end(); it_v++){
 		if(strcmp(it_v->the_dirent.d_name, curr.c_str()) == 0){
 			erased = *it_v;
 			df.erase(it_v);
@@ -1429,6 +1430,7 @@ int main(int argc, char* argv[] ) {
     } 
     else if (op == "ls"  ) { // lists the specified directory.
       ls(file);
+      ls()
     } 
     else if (op == "lstat"  ) { // lists the specified directory.
       struct stat a_stat;
@@ -1532,6 +1534,23 @@ int main(int argc, char* argv[] ) {
       {
           cout << "Error: Unable to close file handle." << endl;
       }
+    }
+    else if(op == "rename"){
+	string new_path;
+	char p [PATH_MAX];
+	char *f = getcwd(p, PATH_MAX);
+	string full_path = string(f);
+	cout << "Enter new path for file: ";
+	cin >> new_path;
+
+	if(my_rename(("./" + file).c_str(), ("./" + new_path).c_str()) == 0){
+		cout << "Successful!" << endl;
+	}
+	else{
+		cout << "Error!" << endl;
+	}
+
+	
     }
     else {
       cout << "Correct usage is: op pathname,\n"; 
