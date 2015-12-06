@@ -436,7 +436,56 @@ int my_utime(const char *path, struct utimbuf *ubuf) {
 
 // called at line #376 of bbfs.c.  Returns file handle not a file descriptor
 int my_open( const char *path, int flags ) {
-    my_mknod(path, flags, 0);
+    // Takes full path and returns handle of inode with name
+    ino_t fHandle = find_ino(path);
+
+    // If the file has been deleted
+    if(ilist.entry[fHandle].metadata.st_ino == DELETED) {
+      cout << "Error: attempting to open deleted file\n";
+      cout << "Path: " << path << endl;
+
+      return -1;
+    }
+    else if( fHandle > 2 ) {
+      cout << "File is open\n";
+      cout << "File Handle: " << fHandle << endl;
+
+      if(open_files.find(fHandle) != open_files.end()) {
+        cout << "Adding to open_files.at(fHandle)\n";
+        cout << open_files.at(fHandle) << endl;
+
+        ++ open_files.at(fHandle); 
+
+        cout << "Added to open_files.at(fHandle)\n";
+        cout << open_files.at(fHandle) << endl;
+      }
+      else { // File not in open file list, hence add
+        open_files.insert(std::pair<ino_t, int >(fHandle, 1));
+        cout << "Updated openfiles.at(fHandle):\n";
+        cout << open_files.at(fHandle) << endl;
+      }
+      return fHandle;
+    }
+    else if( flags & O_CREAT ) {
+      mode_t mode = 0644;
+      my_creat(path, mode);
+
+      fHandle = find_ino(path);
+      cout << "File successfully created and opened\n";
+      cout << "File Handle: " << fHandle << endl;
+
+      open_files.insert(std::pair<ino_t, int> (fHandle, 1));
+      cout << "Updated openfiles.at(fHandle):\n";
+      cout << open_files.at(fHandle) << endl;
+
+      return fHandle;
+    }
+    else {
+      cout << "Error: file didn't open\n";
+      cout << "Path: " << path << endl;
+
+      return -1;
+    }
     return 0;
 }
 
@@ -573,6 +622,8 @@ int my_creat( const char *fpath, mode_t mode ) {
     else { // File already exists
        cout << "Error: file exists\n";
        cout << "Path: " << fpath << endl;
+
+       return -1;
        // return an_err;
     }
     return 0;
@@ -1156,10 +1207,16 @@ int main(int argc, char* argv[] ) {
     else if (op == "lslr"  ) { // executes visit()
       visit(file);
     }
+    else if (op == "creat") {
+        cout << "Specify file permissions in octal: ";
+        mode_t m;
+        (myin.good()? myin : cin) >> oct >> m;
+        record << oct << m << endl;
+        my_creat(file.c_str(), m);
+    }
     else if (op == "open" ) { // executes my_open()
-        File *op_file = find_file(file);
-        //path = find_file(file);
-        // my_open()
+      // Note: Default is RDONLY for testing
+      my_open(file.c_str(), O_RDONLY); 
     }
     else {
       cout << "Correct usage is: op pathname,\n"; 
