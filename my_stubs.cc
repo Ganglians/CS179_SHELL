@@ -42,8 +42,8 @@ c#include <sys/xattr.h>
 // C stuff
 #include "my_stubs.H"
 //#include <fs.h>
-//#include </usr/include/cygwin/fs.h>
-#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
+#include </usr/include/cygwin/fs.h>
+//#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
 #include <sys/stat.h>  // this has our official definition of stat
 #include <dirent.h>    // this has our official definition of dirent
 #include <errno.h>
@@ -531,11 +531,8 @@ int my_chown(const char *path, uid_t uid, gid_t gid) {
   }
   cout << path << " does not exist\n";
   return an_err;
-<<<<<<< HEAD
 }
-=======
-}  
->>>>>>> origin/master
+
 
 // called at line #331 of bbfs.c
 int my_truncate(const char *path, off_t newsize) {
