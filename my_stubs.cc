@@ -317,7 +317,9 @@ const int an_err = -1;
 // lstat is called at line #95 of bbfs.c
 int my_lstat( const char* path, struct stat *statbuf ) {
 	//cdbg << "lstat has been called and is calling find_ino on " << path << endl;
+
 	ino_t fh = find_ino(path);
+
 	//cdbg << "fh = " << fh << endl;
 	int retstat;
 	if ( fh == 0 ) {
@@ -345,6 +347,7 @@ int my_mknod( const char *path, mode_t mode, dev_t dev ) {
 	// creat both directories and regular files, but the man page leaves
 	// out directories.  So, I've not used it, and it's not been tested.
 
+	//cout << "MKNOD PATH IS : " << path << endl;
 
 	dev = 69;   // a device number that's unlikely to be used on vagrant
 
@@ -502,32 +505,30 @@ struct dirent_frame erase_path(const char* path){
 
 	v.pop_back();
 
-	string parent_directory = v.back();
-
 	ino_t fh = find_ino(path);
 
-	map<ino_t, File>::iterator it = ilist.entry.find(fh);
-	ilist.entry.erase(it, ilist.entry.end());
+	//map<ino_t, File>::iterator it = ilist.entry.find(fh);
+	//ilist.entry.erase(it);
 
-	string parent_path = join(v, "/");
+	string parent_path = ""; //CHANGED
+
+	if(!v.empty()){
+		string parent_path = join(v, "/");	
+	}	
 
 	ino_t fh_parent = find_ino(parent_path);
 
-	vector<dirent_frame> df = ilist.entry[fh_parent].dentries;
-
-	vector<dirent_frame>::iterator it_v = df.begin();
+	vector<dirent_frame>::iterator it_v = ilist.entry[fh_parent].dentries.begin();
 	
 	struct dirent_frame erased; 
 
-	for(; it_v != df.end(); it_v++){
+	for(; it_v != ilist.entry[fh_parent].dentries.end(); it_v++){
 		if(strcmp(it_v->the_dirent.d_name, curr.c_str()) == 0){
 			erased = *it_v;
-			df.erase(it_v);
+			ilist.entry[fh_parent].dentries.erase(it_v);
 			break;
 		}
 	}
-
-	ilist.entry[fh].dentries = df;
 
 	return erased;
 }
@@ -549,20 +550,42 @@ int my_rename( const char *path, const char *newpath ) {
 	struct dirent_frame moved_file = erase_path(path);
 
 	vector<string> v = split(string(newpath), "/");
-	
+
+	string new_name = v.back();
+
+	//cout << "NEWPATH : " << newpath << endl;	
+	//cout << "NEW NAME : " << new_name << endl;
+	//cout << "MOVED FILE: " << moved_file.the_dirent.d_name << endl;
+
 	if(is_reg(newpath)){
+		cout << "IS REG" << endl;
 		v.pop_back();
 	}
 
+	strcpy(moved_file.the_dirent.d_name, new_name.c_str());
+
+	//cout << "THE NEW NAME IS " << moved_file.the_dirent.d_name << endl;
+
 	string parent_path = join(v, "/");
+
+	//cout << "VECTOR SIZE IS  : " << v.size() << endl;
+
+	if(v.size() == 1){
+		parent_path = ""; //CHANGED
+	}
+
+	//cout << "PARENT_PATH : " << parent_path << endl;
+
 	ino_t parent_fh = find_ino(parent_path);
 
-	vector<dirent_frame> df = ilist.entry[parent_fh].dentries;
+	ilist.entry[parent_fh].dentries.push_back(moved_file);
 
-	df.push_back(moved_file);
+	vector<dirent_frame> d = ilist.entry[parent_fh].dentries;
 
-	ilist.entry[parent_fh].dentries = df;
+	for(int i = 0; i < d.size(); i++){
+		string name( d.at(i).the_dirent.d_name);
 
+	}
 
 	return 0;
 }
@@ -985,7 +1008,15 @@ int ls(string path) {
 	for ( vector<struct dirent_frame>::iterator it = v.begin(); it != v.end(); it++ ) {
 		struct dirent d = (*it).the_dirent;
 		//cout << d.d_ino << " " << d.d_name << endl;
-		describe_file( path+"/"+d.d_name );
+
+		//cout << "PATH: " << path << endl;
+
+		if(path == "/"){
+		    describe_file(d.d_name);
+		}
+		else{
+			describe_file( path+"/"+d.d_name );
+		}
 	}
 }
 
@@ -1252,14 +1283,14 @@ int describe_file( string pathname ) {
 	char date[64];
 	strftime( date, 15, "%b %d %H:%M  ", localtime( &st.st_mtime ) );
 
-	printf( 
+/*	printf( 
 			"%2i %7s %7s %8ld %8s ",          // format string
 			st.st_nlink,                      // number of links
 			getpwuid(st.st_uid)->pw_name,     // password name
 			getgrgid(st.st_gid)->gr_name,     // group name
 			st.st_size,                       // size of file
 			date                              // time of last modification
-	      );
+	      );*/
 	vector<string> v = split(pathname, "/");
 	cout << v.back() << endl;  
 }
@@ -1390,6 +1421,7 @@ int main(int argc, char* argv[] ) {
 
   // Create a file for testing purposes
   my_creat("ff", 0666);
+  my_creat("cc", 0666);
   
   if ( argc ) {
     myin.open( argv[1] );
@@ -1430,7 +1462,7 @@ int main(int argc, char* argv[] ) {
     } 
     else if (op == "ls"  ) { // lists the specified directory.
       ls(file);
-      ls()
+      //ls()
     } 
     else if (op == "lstat"  ) { // lists the specified directory.
       struct stat a_stat;
@@ -1537,19 +1569,18 @@ int main(int argc, char* argv[] ) {
     }
     else if(op == "rename"){
 	string new_path;
-	char p [PATH_MAX];
-	char *f = getcwd(p, PATH_MAX);
-	string full_path = string(f);
+	//char p [PATH_MAX];
+	//char *f = getcwd(p, PATH_MAX);
+	//string full_path = string(f);
 	cout << "Enter new path for file: ";
 	cin >> new_path;
 
-	if(my_rename(("./" + file).c_str(), ("./" + new_path).c_str()) == 0){
+	if(my_rename((file).c_str(), (new_path).c_str()) == 0){
 		cout << "Successful!" << endl;
 	}
 	else{
 		cout << "Error!" << endl;
 	}
-
 	
     }
     else {
