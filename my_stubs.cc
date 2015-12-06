@@ -523,7 +523,14 @@ int my_chmod(const char *path, mode_t mode) {
 
 // called at line #314 of bbfs.c
 int my_chown(const char *path, uid_t uid, gid_t gid) {
-  return an_err;  
+  ino_t fh = find_ino(path);
+  if(fh > 2) { //file exists
+    ilist.entry[fh].metadata.st_uid = uid;
+    ilist.entry[fh].metadata.st_gid = gid;
+    return 0;
+  }
+  cout << path << " does not exist\n";
+  return an_err;
 }  
 
 // called at line #331 of bbfs.c
