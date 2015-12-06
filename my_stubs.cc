@@ -42,8 +42,8 @@ c#include <sys/xattr.h>
 // C stuff
 #include "my_stubs.H"
 //#include <fs.h>
-#include </usr/include/cygwin/fs.h>
-//#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
+//#include </usr/include/cygwin/fs.h>
+#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
 #include <sys/stat.h>  // this has our official definition of stat
 #include <dirent.h>    // this has our official definition of dirent
 #include <errno.h>
@@ -531,7 +531,11 @@ int my_chown(const char *path, uid_t uid, gid_t gid) {
   }
   cout << path << " does not exist\n";
   return an_err;
+<<<<<<< HEAD
 }
+=======
+}  
+>>>>>>> origin/master
 
 // called at line #331 of bbfs.c
 int my_truncate(const char *path, off_t newsize) {
@@ -609,8 +613,11 @@ int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
   if(off == ilist.entry[fHandle].data.size() - 1) {
       return 0;
   }
+
+  mode_t m = ilist.entry[fHandle].metadata.st_mode;
+
   //check file permissions before allowing the read
-  if(check_permissions(fHandle,"read") ) {
+  if(S_ISREG(m) && (m &  S_IRUSR)) {
       //buf = new char[size + 1];
       int i;  
       //read data from file character by character
@@ -643,8 +650,11 @@ int my_pwrite( int fHandle, const char *buf, size_t size, off_t off ) {
   if(off == ilist.entry[fHandle].data.size() -1) {
     return 0;
   }
+
+  mode_t m = ilist.entry[fHandle].metadata.st_mode;
+
   //test if current user has write permissions to the file
-  if(check_permissions(fHandle,"write")) {
+  if(S_ISREG(m) && (m &  S_IWUSR)) {
     int i = 0;
     for(i = 0; i < strlen(buf); i++) {
         if(ilist.entry[fHandle].data[off+i] == '\0') {

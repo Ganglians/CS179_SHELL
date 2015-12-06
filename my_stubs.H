@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+#include<sys/types.h>
+#include<climits>
 
 typedef struct mydir {               // This is my version of DIR
   ino_t fh;
