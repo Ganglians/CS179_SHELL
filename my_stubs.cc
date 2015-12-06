@@ -42,8 +42,8 @@ c#include <sys/xattr.h>
 // C stuff
 #include "my_stubs.H"
 //#include <fs.h>
-//#include </usr/include/cygwin/fs.h>
-#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
+#include </usr/include/cygwin/fs.h>
+//#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
 #include <sys/stat.h>  // this has our official definition of stat
 #include <dirent.h>    // this has our official definition of dirent
 #include <errno.h>
@@ -610,8 +610,15 @@ int my_chmod(const char *path, mode_t mode) {
 
 // called at line #314 of bbfs.c
 int my_chown(const char *path, uid_t uid, gid_t gid) {
-	return an_err;  
-}  
+  ino_t fh = find_ino(path);
+  if(fh > 2) { //file exists
+    ilist.entry[fh].metadata.st_uid = uid;
+    ilist.entry[fh].metadata.st_gid = gid;
+    return 0;
+  }
+  cout << path << " does not exist\n";
+  return an_err;
+}
 
 // called at line #331 of bbfs.c
 int my_truncate(const char *path, off_t newsize) {
@@ -755,8 +762,37 @@ int my_statvfs(const char *fpath, struct statvfs *statv) {
 }  
 
 // called at line #530 of bbfs.c
-int my_close( int fh ) {
-	return an_err;
+int my_close( int fHandle ) {
+  //check for valid file handle
+  if ( fHandle > 2 )
+  {
+    cout << "Closing file, fHandle: " << fHandle << endl;
+    //search open_file map for fHandle
+    //returns map::end() if nothing found
+    std::map<ino_t,int>::iterator search_result;
+    search_result = open_files.find(fHandle);
+    if(search_result  != open_files.end())
+    {
+        cout << "before close .at(fHandle): " << open_files.at(fHandle) << endl;
+        open_files.at(fHandle) = open_files.at(fHandle) -1;
+        cout << "after close .at(fHandle): " << open_files.at(fHandle) << endl;
+    }
+    else if(search_result == open_files.end())
+    {
+     cout << "File with fHandle: \"" << fHandle << "\" not found.\n";
+     return an_err;
+    }
+    //if no more files open remove file from open_files map
+    if(open_files.at(fHandle) <= 0)
+    {
+        //remove file from open_files map
+        cout << "Removing file with fHandle: \"" << fHandle << "\" from open_files." << endl;;
+        open_files.erase(search_result);
+    }
+    return 0;
+  }
+  return an_err;
+
 }  
 
 // called at line #553 of bbfs.c
@@ -925,7 +961,6 @@ MY_DIR * my_opendir( const char path[PATH_MAX] ) {
 	// Note that fopendir checks whether its input is the handle of a
 	// directory.
 }
-
 
 int describe_file( string pathname );
 
@@ -1246,260 +1281,289 @@ int describe_file( string pathname ) {
 
 int visit( string root ) { // recursive visitor function, implements lslr
 
-	// OPEN root
-	MY_DIR* dirp;                                          // open DIR
-	//if ( ! ( dirp = my_opendir( root.c_str() ) ) ) {
-	if ( ! ( dirp = my_opendir( root.c_str() ) ) ) {
-		cerr << "Cannot open directory " << root << ".\n";
-		return -1;
-	}
+ // OPEN root
+  MY_DIR* dirp;                                          // open DIR
+  //if ( ! ( dirp = my_opendir( root.c_str() ) ) ) {
+  if ( ! ( dirp = my_opendir( root.c_str() ) ) ) {
+    cerr << "Cannot open directory " << root << ".\n";
+    return -1;
+  }
 
-	// CREATE TWO LISTS OF FILE NAMES: file and hardSubdirectory
-	list<string> file;          // names of each file in this dirctory
-	list<string> hardSubdirectory;    // each hard-linked subdirectory
-	list<string>::iterator it;
-	while ( dirent* dp = my_readdir(dirp) ) {
-		string s = dp->d_name;        // converts C string to C++ string
-		if ( s == "." || s == ".." ) continue;             // skip these
-		s = root + ( root[root.size() - 1] == '/'? "" : "/") + s;  // prepend the current path
-		file.push_back( s ); 
-		struct stat st;
-		cdbg << "d_ino = " << dp->d_ino << endl;
-		int error = my_fstat(dp->d_ino, &st);
-		//show_stat(st);
+  // CREATE TWO LISTS OF FILE NAMES: file and hardSubdirectory
+  list<string> file;          // names of each file in this dirctory
+  list<string> hardSubdirectory;    // each hard-linked subdirectory
+  list<string>::iterator it;
+  while ( dirent* dp = my_readdir(dirp) ) {
+    string s = dp->d_name;        // converts C string to C++ string
+    if ( s == "." || s == ".." ) continue;             // skip these
+    s = root + ( root[root.size() - 1] == '/'? "" : "/") + s;  // prepend the current path
+    file.push_back( s ); 
+    struct stat st;
+    cdbg << "d_ino = " << dp->d_ino << endl;
+    int error = my_fstat(dp->d_ino, &st);
+    //show_stat(st);
+   
+    cdbg << "Considering " 
+         << s << dp->d_ino << " of mode " 
+         << oct << st.st_mode << " for hard directory.\n";
+    if ( S_ISDIR(st.st_mode) ) {
+    //if ( ( dp->d_type & DT_DIR ) && !(dp->d_type & DT_LNK) ) {
+      hardSubdirectory.push_back( s );
+    }
+  }
+  my_closedir(dirp);         // close DIR asap, to reset internal data
+  cdbg << "hardSubdirectory has " << hardSubdirectory.size() << " entries.\n";
+  for(  it = hardSubdirectory.begin(); it != hardSubdirectory.end(); it++) {cdbg << *it << endl;}
 
-		cdbg << "Considering " 
-			<< s << dp->d_ino << " of mode " 
-			<< oct << st.st_mode << " for hard directory.\n";
-		if ( S_ISDIR(st.st_mode) ) {
-			//if ( ( dp->d_type & DT_DIR ) && !(dp->d_type & DT_LNK) ) {
-			hardSubdirectory.push_back( s );
-		}
-		}
-		my_closedir(dirp);         // close DIR asap, to reset internal data
-		cdbg << "hardSubdirectory has " << hardSubdirectory.size() << " entries.\n";
-		for(  it = hardSubdirectory.begin(); it != hardSubdirectory.end(); it++) {cdbg << *it << endl;}
+  // EMIT root's HEADER, INCLUDING ITS TOTAL SIZE
+  cout << root << ":" << endl;
+  cout << "total ";
+  int size = 0;
+  for(it = file.begin(); it != file.end(); it++ ) {
+    string filename = *it;
+    struct stat st;
+    if ( my_lstat( filename.c_str(), &st ) == 0 ) size += st.st_blocks;
+  }
+  cout << size/2 << endl;    // kilobytes-per-block correcton factor
 
-		// EMIT root's HEADER, INCLUDING ITS TOTAL SIZE
-		cout << root << ":" << endl;
-		cout << "total ";
-		int size = 0;
-		for(it = file.begin(); it != file.end(); it++ ) {
-			string filename = *it;
-			struct stat st;
-			if ( my_lstat( filename.c_str(), &st ) == 0 ) size += st.st_blocks;
-		}
-		cout << size/2 << endl;    // kilobytes-per-block correcton factor
+  // lstat() AND REPORT ON EACH FILE WHOSE NAME IS IN root
+  file.sort();  
+  for(it = file.begin(); it != file.end(); it++ ) {
+    string filename = *it;    
 
-		// lstat() AND REPORT ON EACH FILE WHOSE NAME IS IN root
-		file.sort();  
-		for(it = file.begin(); it != file.end(); it++ ) {
-			string filename = *it;    
+    struct stat st;       // "struct stat" because stat() is defined
+    if ( my_lstat( filename.c_str(), &st ) != 0 ) {
+      cerr << "Cannot stat file " << filename 
+           << ": " << strerror(errno) << endl;
+      return -1;
+    }
 
-			struct stat st;       // "struct stat" because stat() is defined
-			if ( my_lstat( filename.c_str(), &st ) != 0 ) {
-				cerr << "Cannot stat file " << filename 
-					<< ": " << strerror(errno) << endl;
-				return -1;
-			}
+    cout << st.st_ino << ": "     // added for CS179F
+         << ( (S_ISDIR(st.st_mode) != 0) ? 'd' : '-' )
+         << ( (st.st_mode & S_IRUSR) ? 'r' : '-' )
+         << ( (st.st_mode & S_IWUSR) ? 'w' : '-' )
+         << ( (st.st_mode & S_IXUSR) ? 'x' : '-' )
+         << ( (st.st_mode & S_IRGRP) ? 'r' : '-' )
+         << ( (st.st_mode & S_IWGRP) ? 'w' : '-' )
+         << ( (st.st_mode & S_IXGRP) ? 'x' : '-' )
+         << ( (st.st_mode & S_IROTH) ? 'r' : '-' )
+         << ( (st.st_mode & S_IWOTH) ? 'w' : '-' )
+         << ( (st.st_mode & S_IXOTH) ? 'x' : '-' )
+    ;
 
-			cout << st.st_ino << ": "     // added for CS179F
-				<< ( (S_ISDIR(st.st_mode) != 0) ? 'd' : '-' )
-				<< ( (st.st_mode & S_IRUSR) ? 'r' : '-' )
-				<< ( (st.st_mode & S_IWUSR) ? 'w' : '-' )
-				<< ( (st.st_mode & S_IXUSR) ? 'x' : '-' )
-				<< ( (st.st_mode & S_IRGRP) ? 'r' : '-' )
-				<< ( (st.st_mode & S_IWGRP) ? 'w' : '-' )
-				<< ( (st.st_mode & S_IXGRP) ? 'x' : '-' )
-				<< ( (st.st_mode & S_IROTH) ? 'r' : '-' )
-				<< ( (st.st_mode & S_IWOTH) ? 'w' : '-' )
-				<< ( (st.st_mode & S_IXOTH) ? 'x' : '-' )
-				;
+    char date[64];
+    strftime( date, 15, "%b %d %H:%M  ", localtime( &st.st_mtime ) );
 
-			char date[64];
-			strftime( date, 15, "%b %d %H:%M  ", localtime( &st.st_mtime ) );
+    printf( 
+      "%2i %7s %7s %8ld %8s ",          // format string
+      st.st_nlink,                      // number of links
+      getpwuid(st.st_uid)->pw_name,     // password name
+      getgrgid(st.st_gid)->gr_name,     // group name
+      st.st_size,                       // size of file
+      date                              // time of last modification
+    );
 
-			printf( 
-					"%2i %7s %7s %8ld %8s ",          // format string
-					st.st_nlink,                      // number of links
-					getpwuid(st.st_uid)->pw_name,     // password name
-					getgrgid(st.st_gid)->gr_name,     // group name
-					st.st_size,                       // size of file
-					date                              // time of last modification
-			      );
+    cout << *it << endl;
 
-			cout << *it << endl;
+  }
 
-		}
+  // RECURSE THROUGH root's HARD-LINKED SUBDIRECTORIES AND RETURN
+  for(it = hardSubdirectory.begin(); it != hardSubdirectory.end(); it++ ) {
+    cout << endl;
+    visit( *it );   
+  }
+  return 0;                                        // return success
+}
 
-		// RECURSE THROUGH root's HARD-LINKED SUBDIRECTORIES AND RETURN
-		for(it = hardSubdirectory.begin(); it != hardSubdirectory.end(); it++ ) {
-			cout << endl;
-			visit( *it );   
-		}
-		return 0;                                        // return success
-	}
+// int main( int argc, char* argv[] ) { 
+//   return visit( argc > 1 ? argv[1] : "." ); 
+// }
 
-	// int main( int argc, char* argv[] ) { 
-	//   return visit( argc > 1 ? argv[1] : "." ); 
-	// }
+int main(int argc, char* argv[] ) {
+  int cwd = 2;  // ino of current working directory;
+  // The place for testing of functions.
+  // cdbg << "Now we call initialize()" << endl;
+  initialize();
+  stringstream record;
+  ifstream myin;
 
-	int main(int argc, char* argv[] ) {
-		int cwd = 2;  // ino of current working directory;
-		// The place for testing of functions.
-		// cdbg << "Now we call initialize()" << endl;
-		initialize();
-		stringstream record;
-		ifstream myin;
+  // Create a file for testing purposes
+  my_creat("ff", 0666);
+  
+  if ( argc ) {
+    myin.open( argv[1] );
+  }
+  
+  // Idiom for infinite loop
+  for(;;) { 
+    string op, file;
+    string path; // **
 
-		// Create a file for testing purposes
-		my_creat("ff", 0666);
+    // if ( myin.eof() ) exit(0);
+    cout << "Which op and file? " << endl;
+    (myin.good() ? myin : cin) >> op >> file;
 
-		if ( argc ) {
-			myin.open( argv[1] );
-		}
+    if ( op != "exit" ){
+      record << op << " " << file << endl;
+    }
+    if (op == "?" || op == "help") { //List available operations
+    }
+    else if (op == "play"  ) { // accepts input from file instead of keyboard
+    } 
+    else if (op == "save"  ) { // saves dialog to specified file
+    } 
+    else if (op == "mkdir" ) {
+    // prompts for protection mode
+      cout << "Specify file permissions in octal: ";
+      mode_t mode; 
+      // cin >> oct >> mode;
+      (myin.good()? myin : cin) >> oct >> mode;
+      record << oct << mode << endl;
+      my_mkdir(file.c_str(), mode );
+    } 
+    else if (op == "rmdir"  ) { // shows file's metadata
+      my_rmdir(file.c_str() );
+    } 
+    else if (op == "show"  ) { // shows file's metadata 
+      show_stat( ilist.entry[ int(find_ino(file)) ].metadata );
+    } 
+    else if (op == "ls"  ) { // lists the specified directory.
+      ls(file);
+    } 
+    else if (op == "lstat"  ) { // lists the specified directory.
+      struct stat a_stat;
+      my_lstat(file.c_str(), &a_stat);
+      show_stat(a_stat);
+    } 
+    else if (op == "exit"  ) { // quits 
+      // save dialog so far to specified file.
+      ofstream myfile;
+      myfile.open(file.c_str());
+      myfile << record.str();
+      myfile.close();
+      //check if buf has anything
+      // if it does delete it
+      return 0;
+    } 
+    else if (op == "break"  ) { // executes the rest of main()
+      break;
+    } 
+    else if (op == "lslr"  ) { // executes visit()
+      visit(file);
+    }
+    else if (op == "creat") {
+        cout << "Specify file permissions in octal: ";
+        mode_t m;
+        (myin.good()? myin : cin) >> oct >> m;
+        record << oct << m << endl;
+        my_creat(file.c_str(), m);
+    }
+    else if (op == "open") { // executes my_open()
+      // Note: Default is RDONLY for testing
+      my_open(file.c_str(), O_RDONLY); 
+    }
+    else if (op == "read") {
+      int fHandle = my_open(file.c_str(), O_RDONLY);
+      size_t num_bytes = 0;
+      off_t  off       = 0;
 
-		// Idiom for infinite loop
-		for(;;) { 
-			string op, file;
-			string path; // **
+      cout << "Enter bytes to read:\n";
+      (myin.good()? myin : cin) >> dec >> num_bytes;
 
-			// if ( myin.eof() ) exit(0);
-			cout << "Which op and file? " << endl;
-			(myin.good() ? myin : cin) >> op >> file;
+      cout << "Enter offset:\n";
+      (myin.good()? myin : cin) >> dec >> off;
 
-			if ( op != "exit" ){
-				record << op << " " << file << endl;
-			}
-			if (op == "?" || op == "help") { //List available operations
-			}
-			else if (op == "play"  ) { // accepts input from file instead of keyboard
-			} 
-			else if (op == "save"  ) { // saves dialog to specified file
-			} 
-			else if (op == "mkdir" ) {
-				// prompts for protection mode
-				cout << "Specify file permissions in octal: ";
-				mode_t mode; 
-				// cin >> oct >> mode;
-				(myin.good()? myin : cin) >> oct >> mode;
-				record << oct << mode << endl;
-				my_mkdir(file.c_str(), mode );
-			} 
-			else if (op == "rmdir"  ) { // shows file's metadata
-				my_rmdir(file.c_str() );
-			} 
-			else if (op == "show"  ) { // shows file's metadata 
-				show_stat( ilist.entry[ int(find_ino(file)) ].metadata );
-			} 
-			else if (op == "ls"  ) { // lists the specified directory.
-				ls(file);
-			} 
-			else if (op == "lstat"  ) { // lists the specified directory.
-				struct stat a_stat;
-				my_lstat(file.c_str(), &a_stat);
-				show_stat(a_stat);
-			} 
-			else if (op == "exit"  ) { // quits 
-				// save dialog so far to specified file.
-				ofstream myfile;
-				myfile.open(file.c_str());
-				myfile << record.str();
-				myfile.close();
-				//check if buf has anything
-				// if it does delete it
-				return 0;
-			} 
-			else if (op == "break"  ) { // executes the rest of main()
-				break;
-			} 
-			else if (op == "lslr"  ) { // executes visit()
-				visit(file);
-			}
-			else if (op == "creat") {
-				cout << "Specify file permissions in octal: ";
-				mode_t m;
-				(myin.good()? myin : cin) >> oct >> m;
-				record << oct << m << endl;
-				my_creat(file.c_str(), m);
-			}
-			else if (op == "open") { // executes my_open()
-				// Note: Default is RDONLY for testing
-				my_open(file.c_str(), O_RDONLY); 
-			}
-			else if (op == "read") {
-				int fHandle = my_open(file.c_str(), O_RDONLY);
-				size_t num_bytes = 0;
-				off_t  off       = 0;
+      char *buf;
+      buf = new char[num_bytes](); // Unallocate dynamic memory at some point
+      cout << "num_bytes: " << num_bytes << endl;
+      cout << "offset: " << off << endl;
 
-				cout << "Enter bytes to read:\n";
-				(myin.good()? myin : cin) >> dec >> num_bytes;
+      int stat = my_pread(fHandle, buf, num_bytes, off);
 
-				cout << "Enter offset:\n";
-				(myin.good()? myin : cin) >> dec >> off;
+      cout << endl << "Bytes read: " << stat << endl;
+      cout << "buf: " << buf << endl;
+    }
+    else if (op == "write") {
+      int fHandle = my_open(file.c_str(), O_RDONLY);
+      size_t num_bytes = 0;
+      off_t  off       = 0;
+      string s;
 
-				char *buf;
-				buf = new char[num_bytes](); // Unallocate dynamic memory at some point
-				cout << "num_bytes: " << num_bytes << endl;
-				cout << "offset: " << off << endl;
+      cout << "Enter string to write to file:\n";
+      cin.ignore();
+      getline(cin, s);
 
-				int stat = my_pread(fHandle, buf, num_bytes, off);
+      const char *buf = s.c_str();
+      num_bytes = strlen(buf);
 
-				cout << endl << "Bytes read: " << stat << endl;
-				cout << "buf: " << buf << endl;
-			}
-			else if (op == "write") {
-				int fHandle = my_open(file.c_str(), O_RDONLY);
-				size_t num_bytes = 0;
-				off_t  off       = 0;
-				string s;
+      cout << "Enter offset: ";
+      (myin.good()? myin : cin) >> dec >> off;
 
-				cout << "Enter string to write to file:\n";
-				cin.ignore();
-				getline(cin, s);
+      int stat;
+      stat = my_pwrite(fHandle, buf, num_bytes, off);
 
-				const char *buf = s.c_str();
-				num_bytes = strlen(buf);
+      cout << "num_bytes: " << num_bytes << endl;
+    }
+    else if(op == "link") {
+      string l; // Link's name
+      cout << "Enter link name: \n";
+      cin >> l;
 
-				cout << "Enter offset: ";
-				(myin.good()? myin : cin) >> dec >> off;
+      const char *np = l.c_str(); // New path
 
-				int stat;
-				stat = my_pwrite(fHandle, buf, num_bytes, off);
+      int c;      
+      c = my_link(file.c_str(), np);
 
-				cout << "num_bytes: " << num_bytes << endl;
-			}
-			else {
-				cout << "Correct usage is: op pathname,\n"; 
-				cout << "where \"op\" is one of the following:\n";
-				cout << "help, play, save, mkdir, show, break, lslr, exit.\n";
-				cout << "For example, type \"exit now\" to exit.\n";
-			}
-		}  
-		// Continuation of main(), which is reacable via the "break" op.
-		show_stat( ilist.entry[2].metadata );  // all looks good here.
-		cdbg << "Now we call lstat on \"/\" and &mystat" << endl;
-		struct stat mystat;
-		my_lstat("/",&mystat);
-		cdbg << "Now we call ls on \"/\"" << endl;
-		ls("/"); 
-		cdbg << "Now we call mkdir on \"/junk\" and 0700" << endl;
-		my_mkdir("/junk", 0700);
-		cdbg << "Now we call ls on \"/\"" << endl;
-		ls("/");
+      if(c != an_err) {
+        cout <<"Successfully added link\n";
+      }
+    }
+    else if(op == "close")
+    {
+      int fHandle = 0;
+      cout << "Enter fHandle to close: ";
+      cin >> fHandle;
+      int close_result  = my_close(fHandle);
+      if (close_result == 0)
+      {
+          cout << "Successfully closed handle\n";
+      }
+      else if (close_result == an_err)
+      {
+          cout << "Error: Unable to close file handle." << endl;
+      }
+    }
+    else {
+      cout << "Correct usage is: op pathname,\n"; 
+      cout << "where \"op\" is one of the following:\n";
+      cout << "help, play, save, mkdir, show, break, lslr, exit.\n";
+      cout << "For example, type \"exit now\" to exit.\n";
+    }
+  }  
+  // Continuation of main(), which is reacable via the "break" op.
+  show_stat( ilist.entry[2].metadata );  // all looks good here.
+  cdbg << "Now we call lstat on \"/\" and &mystat" << endl;
+  struct stat mystat;
+  my_lstat("/",&mystat);
+  cdbg << "Now we call ls on \"/\"" << endl;
+  ls("/"); 
+  cdbg << "Now we call mkdir on \"/junk\" and 0700" << endl;
+  my_mkdir("/junk", 0700);
+  cdbg << "Now we call ls on \"/\"" << endl;
+  ls("/");
 
-		cdbg << "now we call ls on \"/junk\"" << endl;
-		//  cout << endl;
-		ls("/junk");
+  cdbg << "now we call ls on \"/junk\"" << endl;
+  //  cout << endl;
+  ls("/junk");
+  
+  cdbg << "Now we call mkdir on \"/junk/stuff\" and 0700" << endl;
+  my_mkdir("/junk/stuff", 700);
+  cdbg << "now we call ls on \"/junk\"" << endl;
+  ls("/junk");
+  cdbg << "now we call ls on \"/junk/stuff\"" << endl;
+  ls("/junk/stuff");
 
-		cdbg << "Now we call mkdir on \"/junk/stuff\" and 0700" << endl;
-		my_mkdir("/junk/stuff", 700);
-		cdbg << "now we call ls on \"/junk\"" << endl;
-		ls("/junk");
-		cdbg << "now we call ls on \"/junk/stuff\"" << endl;
-		ls("/junk/stuff");
-
-		cout << endl;
-		describe_file( "/junk" );
-		cout << endl;
-	}
+  cout << endl;
+  describe_file( "/junk" );
+  cout << endl;
+}
