@@ -447,13 +447,12 @@ int my_pread( int fh, char *buf, size_t size, off_t offset ) {
         return an_err;
     }
 
-    map<ino_t, File>::iterator it = ilist.entry[fh];
 
-    if(it != ilist.entry.end()){
+    if(ilist.entry.find(fh) != ilist.entry.end()){
 
-        File temp = *it;
+        File temp = ilist.entry[fh];
 
-        if(S_ISDIR(temp.metadata.st_mode) || !(metadata.st_mode & S_IRUSR)){
+        if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IRUSR)){
             return an_err;
         }
 
@@ -479,13 +478,11 @@ int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
         return an_err;
     }
 
-    map<ino_t, File>::iterator it = ilist.entry[fh];
+    if(ilist.entry.find(fh) != ilist.entry.end()){
 
-    if(it != ilist.entry.end()){
+        File temp = ilist.entry[fh];
 
-        File temp = *it;
-
-        if(S_ISDIR(temp.metadata.st_mode) || !(metadata.st_mode & S_IWUSR)){
+        if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IWUSR)){
             return an_err;
         }
 
@@ -505,7 +502,7 @@ int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
 
         string buff(buf, buf + size);
 
-        *it->data = first_half + buff + second_half;
+        ilist.entry[fh].data = first_half + buff + second_half;
 
         return size;
 
