@@ -42,8 +42,8 @@ c#include <sys/xattr.h>
 // C stuff
 #include "my_stubs.H"
 //#include <fs.h>
-//#include </usr/include/cygwin/fs.h>
-#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
+#include </usr/include/cygwin/fs.h>
+//#include </usr/include/linux/fs.h>  // needed for compilation on vagrant
 #include <sys/stat.h>  // this has our official definition of stat
 #include <dirent.h>    // this has our official definition of dirent
 #include <errno.h>
@@ -184,6 +184,103 @@ void show_stat( struct stat& root ) {
   cerr << "st_ctime   = " << hex << root.st_ctime   << endl;  
 }; 
 
+bool check_permissions(ino_t fh, string operation) {
+   //check if valid fh has been given
+    if(fh < 2) { // || ilist.count < fh) 
+        cout << "Invalid fh.\n";
+        return false;
+    }
+    
+    //current user's gid and uid
+    uid_t cur_uid = geteuid(); //Payne also uses this function when making files
+    gid_t cur_gid = getegid();  
+    //files gid and uid
+    uid_t file_owneruid = ilist.entry[fh].metadata.st_uid;
+    gid_t file_ownergid = ilist.entry[fh].metadata.st_gid;
+    mode_t file_permissions = ilist.entry[fh].metadata.st_mode; 
+    
+    /* octal values for different flag permissions
+     * will simply do a bitwise AND to determine if user has permissions
+     * */
+    mode_t uread_mode = 400; //user_read
+    mode_t uwrite_mode = 200;//user_write
+    mode_t uexec_mode = 100;//User_exec
+    mode_t gread_mode = 040;//group read
+    mode_t gwrite_mode = 020;// group write
+    mode_t gexec_mode = 010;//group exec
+    mode_t oread_mode = 004;//other read
+    mode_t owrite_mode = 002;//other write
+    mode_t oexec_mode = 001;//other exec
+    mode_t result = 0; //value to return which will be converted to boolean value
+    
+    //check if current user's uid matches with the file owners uid
+    bool is_owner = false;
+    if(cur_uid == file_owneruid) {
+      is_owner = true;   
+    }
+    else {
+        is_owner = false;
+    }
+    
+    //check if the current user's gid matches with the file owners gid
+    bool is_group = false; 
+    if(cur_gid == file_ownergid) {
+        is_group =  true;
+    }
+    else {
+        is_group = false;
+    }
+    /* Depending on the operation given 
+    * perform one of the following bitwise operations
+    * using the file's permissions and the octal value for that permission.
+    * A value can be converted to a boolean, where any value greater than 0
+    * is considered true. Therefore if a file has given the permission
+    * the result of the bitwise operation will be positive -> true.
+    */
+    if(operation == "read") {
+        if(is_owner) {
+          //bitwise & using filepermission with user read permission value
+          return file_permissions&uread_mode;
+        }
+        else if(is_group) {
+          //bitwise & using filepermission with group read permission value
+          return file_permissions&gread_mode;
+        }
+        else {
+        //bitwise & using filepermission with other read permission value  
+         return file_permissions&oread_mode;   
+        }
+        return false;
+    }
+    else if(operation == "write") {
+        if(is_owner) {
+          return file_permissions&uwrite_mode;
+        }
+        else if(is_group) {
+          return file_permissions&gwrite_mode;
+        }
+        else {
+          return file_permissions&owrite_mode;   
+        }
+        
+        return false;
+    }
+    else if(operation == "execute") {
+        if(is_owner) {
+          return file_permissions&uexec_mode;
+        }
+        else if(is_group) {
+          return file_permissions&gexec_mode;
+        }
+        else {
+          return file_permissions&oexec_mode;   
+        }
+      //won't need as we will not have executables 
+      //within our filesystem
+      return false;
+    }
+    return false;
+}
 
 inline vector<string> // A simple utility for splitting strings at a find-pattern.
 split(const string s, const string pat ) {
@@ -415,7 +512,13 @@ int my_link(const char *path, const char *newpath) {
 
 // called at line #296 of bbfs.c
 int my_chmod(const char *path, mode_t mode) {
-  return an_err;  
+  ino_t fh = find_ino(path);
+  if (fh > 2){ //file exists
+    ilist.entry[fh].metadata.st_mode = mode;
+    return 0;
+  }
+  cout << path << " does not exist\n";
+  return an_err;
 }  
 
 // called at line #314 of bbfs.c
@@ -490,74 +593,67 @@ int my_open( const char *path, int flags ) {
 }
 
 // called at line #411 of bbfs.c  Note that our first arg is an fh not an fd
-int my_pread( int fh, char *buf, size_t size, off_t offset ) {
-
-    if(size <= 0 || offset < 0){
-        return an_err;
-    }
-
-
-    if(ilist.entry.find(fh) != ilist.entry.end()){
-
-        File temp = ilist.entry[fh];
-
-        if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IRUSR)){
-            return an_err;
-        }
-
-        string data = temp.data;
-
-        int bytes_read = 0;
-
-        for(int i = offset; i < offset + size && i < data.size(); i++){
-            buf[i - offset] = data.at(i);
-            bytes_read++;
-        }
-
-        return bytes_read;
-    }
-
-    return an_err;
+int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
+  //if the given off is larger than the files data return an error
+  if(off < 0 || ilist.entry[fHandle].data.size() < off) {
+      return an_err;
+  }   
+  //if the off is at the end of the file return 0
+  if(off == ilist.entry[fHandle].data.size() - 1) {
+      return 0;
+  }
+  //check file permissions before allowing the read
+  if(check_permissions(fHandle,"read") ) {
+      //buf = new char[size + 1];
+      int i;  
+      //read data from file character by character
+      for(i = 0; i < size; i++) {
+          if(ilist.entry[fHandle].data[off + i] == '\0') {
+            cout << "data[off+i]: " << ilist.entry[fHandle].data[off + i] << endl;
+              break;
+          }
+          buf[i] = ilist.entry[fHandle].data[off + i];
+                  //cout << buf[i] << " ";
+      }
+      //buf[i + 1] = '\0';
+      return i;
+  }
+  else {
+      uid_t cur_uid = geteuid(); 
+      cout << "Current user: " << getpwuid(cur_uid)->pw_name  
+           << " does not have permission to read from this file.\n";
+      return 0;
+  }  
 }  
 
-// called at line #439 of bbfs.c  Note that our firt arg is an fh not an fd
-int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
-
-    if(size == 0){
-        return an_err;
-    }
-
-    if(ilist.entry.find(fh) != ilist.entry.end()){
-
-        File temp = ilist.entry[fh];
-
-        if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IWUSR)){
-            return an_err;
-        }
-
-        string data = temp.data;
-
-        if(offset < 0 || offset >= data.size()){
-            return an_err;
-        }
-
-        string first_half = data.substr(0, offset);
-
-        string second_half = "";
-
-        if(offset + size < data.size()){
-            second_half = data.substr(offset + size);
-        }
-
-        string buff(buf, buf + size);
-
-        ilist.entry[fh].data = first_half + buff + second_half;
-
-        return size;
-
-    }
- 
+// called at line #439 of bbfs.c  Note that our first arg is an fh not an fd
+int my_pwrite( int fHandle, const char *buf, size_t size, off_t off ) {
+  //if off is larger than file size return error
+  if(off < 0 || ilist.entry[fHandle].data.size() < off) {
     return an_err;
+  }
+  //if off is as large as the file return 0;
+  if(off == ilist.entry[fHandle].data.size() -1) {
+    return 0;
+  }
+  //test if current user has write permissions to the file
+  if(check_permissions(fHandle,"write")) {
+    int i = 0;
+    for(i = 0; i < strlen(buf); i++) {
+        if(ilist.entry[fHandle].data[off+i] == '\0') {
+          cout << "End of fhandle: " << fHandle << "reached, write complete" << endl;
+        }
+    
+        ilist.entry[fHandle].data[i+off] = buf[i];
+    }
+    return i;
+  }
+  else {
+    uid_t cur_uid = geteuid();  
+    cout << "Current user: " << getpwuid(cur_uid)->pw_name;  
+    cout << " does not have permission to write to this file.\n";
+    return 0;
+  }
 }  
 
 // called at line #463 of bbfs.c
@@ -600,11 +696,26 @@ int my_lremovexattr( const char *path, const char *name ) {
   return an_err;  
 }  
 
-
 // called at line #826 of bbfs.c
+// F_OK tests for the existence of the file. 
+// R_OK, W_OK, and X_OK test whether the file exists and grants read, write, and execute permissions, respectively. 
+
 int my_access( const char *fpath, int mask ) {
-  return an_err;  
-}  
+  ino_t fh = find_ino(fpath);
+  struct stat st;
+  if (my_lstat (fpath, &st) != 0){
+     cout << "Cannont stat file " << fpath << endl;
+     return -1;
+  }
+  if( (st.st_mode & S_IRUSR) != (mask & S_IRUSR))
+    return -1;
+  if( (st.st_mode & S_IWUSR) != (mask & S_IWUSR))
+    return -1;
+  if( (st.st_mode & S_IXUSR) != (mask & S_IXUSR))
+    return -1;
+
+  return 0;
+} 
 
 // called at line #856 of bbfs.c
 int my_creat( const char *fpath, mode_t mode ) {
@@ -1147,8 +1258,13 @@ int main(int argc, char* argv[] ) {
   initialize();
   stringstream record;
   ifstream myin;
+
+  // Create a file for testing purposes
+  my_creat("ff", 0666);
   
-  if ( argc ){myin.open( argv[1] );}
+  if ( argc ) {
+    myin.open( argv[1] );
+  }
   
   // Idiom for infinite loop
   for(;;) { 
@@ -1214,9 +1330,51 @@ int main(int argc, char* argv[] ) {
         record << oct << m << endl;
         my_creat(file.c_str(), m);
     }
-    else if (op == "open" ) { // executes my_open()
+    else if (op == "open") { // executes my_open()
       // Note: Default is RDONLY for testing
       my_open(file.c_str(), O_RDONLY); 
+    }
+    else if (op == "read") {
+      int fHandle = my_open(file.c_str(), O_RDONLY);
+      size_t num_bytes = 0;
+      off_t  off       = 0;
+
+      cout << "Enter bytes to read:\n";
+      (myin.good()? myin : cin) >> dec >> num_bytes;
+
+      cout << "Enter offset:\n";
+      (myin.good()? myin : cin) >> dec >> off;
+
+      char *buf;
+      buf = new char[num_bytes](); // Unallocate dynamic memory at some point
+      cout << "num_bytes: " << num_bytes << endl;
+      cout << "offset: " << off << endl;
+
+      int stat = my_pread(fHandle, buf, num_bytes, off);
+
+      cout << endl << "Bytes read: " << stat << endl;
+      cout << "buf: " << buf << endl;
+    }
+    else if (op == "write") {
+      int fHandle = my_open(file.c_str(), O_RDONLY);
+      size_t num_bytes = 0;
+      off_t  off       = 0;
+      string s;
+
+      cout << "Enter string to write to file:\n";
+      cin.ignore();
+      getline(cin, s);
+
+      const char *buf = s.c_str();
+      num_bytes = strlen(buf);
+
+      cout << "Enter offset: ";
+      (myin.good()? myin : cin) >> dec >> off;
+
+      int stat;
+      stat = my_pwrite(fHandle, buf, num_bytes, off);
+
+      cout << "num_bytes: " << num_bytes << endl;
     }
     else {
       cout << "Correct usage is: op pathname,\n"; 
