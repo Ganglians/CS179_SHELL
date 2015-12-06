@@ -553,14 +553,12 @@ int my_rename( const char *path, const char *newpath ) {
 
 	string new_name = v.back();
 
-	//cout << "NEWPATH : " << newpath << endl;	
+	cout << "NEWPATH : " << newpath << endl;	
 	//cout << "NEW NAME : " << new_name << endl;
 	//cout << "MOVED FILE: " << moved_file.the_dirent.d_name << endl;
 
-	if(is_reg(newpath)){
-		cout << "IS REG" << endl;
-		v.pop_back();
-	}
+	v.pop_back();
+
 
 	strcpy(moved_file.the_dirent.d_name, new_name.c_str());
 
@@ -570,11 +568,11 @@ int my_rename( const char *path, const char *newpath ) {
 
 	//cout << "VECTOR SIZE IS  : " << v.size() << endl;
 
-	if(v.size() == 1){
-		parent_path = ""; //CHANGED
-	}
+//	if(v.size() == 1 && ){
+//		parent_path = ""; //CHANGED
+//	}
 
-	//cout << "PARENT_PATH : " << parent_path << endl;
+	cout << "PARENT_PATH : " << parent_path << endl;
 
 	ino_t parent_fh = find_ino(parent_path);
 
