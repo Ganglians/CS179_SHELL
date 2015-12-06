@@ -523,8 +523,15 @@ int my_chmod(const char *path, mode_t mode) {
 
 // called at line #314 of bbfs.c
 int my_chown(const char *path, uid_t uid, gid_t gid) {
-  return an_err;  
-}  
+  ino_t fh = find_ino(path);
+  if(fh > 2) { //file exists
+    ilist.entry[fh].metadata.st_uid = uid;
+    ilist.entry[fh].metadata.st_gid = gid;
+    return 0;
+  }
+  cout << path << " does not exist\n";
+  return an_err;
+}
 
 // called at line #331 of bbfs.c
 int my_truncate(const char *path, off_t newsize) {
@@ -662,7 +669,35 @@ int my_statvfs(const char *fpath, struct statvfs *statv) {
 }  
 
 // called at line #530 of bbfs.c
-int my_close( int fh ) {
+int my_close( int fHandle ) {
+  //check for valid file handle
+  if ( fHandle > 2 )
+  {
+    cout << "Closing file, fHandle: " << fHandle << endl;
+    //search open_file map for fHandle
+    //returns map::end() if nothing found
+    std::map<ino_t,int>::iterator search_result;
+    search_result = open_files.find(fHandle);
+    if(search_result  != open_files.end())
+    {
+        cout << "before close .at(fHandle): " << open_files.at(fHandle) << endl;
+        open_files.at(fHandle) = open_files.at(fHandle) -1;
+        cout << "after close .at(fHandle): " << open_files.at(fHandle) << endl;
+    }
+    else if(search_result == open_files.end())
+    {
+     cout << "File with fHandle: \"" << fHandle << "\" not found.\n";
+     return an_err;
+    }
+    //if no more files open remove file from open_files map
+    if(open_files.at(fHandle) <= 0)
+    {
+        //remove file from open_files map
+        cout << "Removing file with fHandle: \"" << fHandle << "\" from open_files." << endl;;
+        open_files.erase(search_result);
+    }
+    return 0;
+  }
   return an_err;
 }  
 
@@ -832,7 +867,6 @@ MY_DIR * my_opendir( const char path[PATH_MAX] ) {
   // Note that fopendir checks whether its input is the handle of a
   // directory.
 }
-
 
 int describe_file( string pathname );
 
@@ -1375,6 +1409,35 @@ int main(int argc, char* argv[] ) {
       stat = my_pwrite(fHandle, buf, num_bytes, off);
 
       cout << "num_bytes: " << num_bytes << endl;
+    }
+    else if(op == "link") {
+      string l; // Link's name
+      cout << "Enter link name: \n";
+      cin >> l;
+
+      const char *np = l.c_str(); // New path
+
+      int c;      
+      c = my_link(file.c_str(), np);
+
+      if(c != an_err) {
+        cout <<"Successfully added link\n";
+      }
+    }
+    else if(op == "close")
+    {
+      int fHandle = 0;
+      cout << "Enter fHandle to close: ";
+      cin >> fHandle;
+      int close_result  = my_close(fHandle);
+      if (close_result == 0)
+      {
+          cout << "Successfully closed handle\n";
+      }
+      else if (close_result == an_err)
+      {
+          cout << "Error: Unable to close file handle." << endl;
+      }
     }
     else {
       cout << "Correct usage is: op pathname,\n"; 
