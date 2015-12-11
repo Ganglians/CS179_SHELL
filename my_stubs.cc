@@ -530,7 +530,10 @@ int my_link(const char *path, const char *newpath) {
 // called at line #296 of bbfs.c
 int my_chmod(const char *path, mode_t mode) {
 	ino_t fh = find_ino(path);
-	if (fh > 2){ //file exists
+
+	struct stat st = ilist.entry[fh].metadata;
+
+	if (fh > 2 && (st.st_mode & S_IWUSR)){ //file exists
 		ilist.entry[fh].metadata.st_mode = mode;
 		return 0;
 	}
@@ -541,7 +544,10 @@ int my_chmod(const char *path, mode_t mode) {
 // called at line #314 of bbfs.c
 int my_chown(const char *path, uid_t uid, gid_t gid) {
   ino_t fh = find_ino(path);
-  if(fh > 2) { //file exists
+
+	struct stat st = ilist.entry[fh].metadata;
+
+  if(fh > 2 && (st.st_mode & S_IWUSR)) { //file exists
     ilist.entry[fh].metadata.st_uid = uid;
     ilist.entry[fh].metadata.st_gid = gid;
     return 0;
