@@ -1478,7 +1478,7 @@ int visit( string root ) { // recursive visitor function, implements lslr
 				(myin.good() ? myin : cin) >> dec >> m;
 				
 				record << oct << m << endl;
-				my_chmod(file.c_str(), mode);
+				my_chmod(file.c_str(), m);
 			}
 			else if(op == "access"){
 
@@ -1487,7 +1487,7 @@ int visit( string root ) { // recursive visitor function, implements lslr
 				(myin.good() ? myin : cin) >> dec >> m;
 				
 				record << oct << m << endl;
-				int a = my_access(file.c_str(), mode);
+				int a = my_access(file.c_str(), m);
 
 				if(a == 0 ){
 					cout<<"Success\n";
