@@ -577,7 +577,10 @@ int my_open( const char *path, int flags ) {
 		cout << "File Handle: " << fHandle << endl;
 
 		ilist.entry[fHandle].number_of_opens++;
+		int opens = ilist.entry[fHandle].number_of_opens;
 
+		cout << "\nNumber of opens for file: " << opens << endl << endl;
+		
 		//ilist.entry[fHandle].metadata.st_nlink++;
 		return fHandle;
 	}
@@ -680,11 +683,17 @@ int my_close( int fHandle ) {
 
 	cout << "Closing file, fHandle: " << fHandle << endl;
 	//ilist.entry[fHandle].metadata.st_nlink--;
-	ilist.entry[fHandle].number_of_opens--;
 
 	int opens = ilist.entry[fHandle].number_of_opens;
+	ilist.entry[fHandle].number_of_opens = (opens <= 0) ? 0 : opens - 1;
+	opens = (opens <= 0) ? 0 : opens - 1;
 
-	if(ilist.entry[fHandle].metadata.st_nlink == 0 && opens == 0){
+	cout << "\nNumber of opens for file: " << opens << endl << endl;
+	
+
+	int links = ilist.entry[fHandle].metadata.st_nlink;
+
+	if(links == 0 && opens == 0){
 		ilist.entry.erase(fHandle);
 	}
 
