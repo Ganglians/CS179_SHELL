@@ -348,11 +348,17 @@ int my_unlink( const char *path ) {
 	string fName = s.back();
 	string newpath = join(s, "/");
 
+	int opens = ilist.entry[fHandle].number_of_opens;
+
 	//decrease number of links
 	if(ilist.entry[fHandle].metadata.st_nlink >0){
 		cout<<"Number of links before unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
 		ilist.entry[fHandle].metadata.st_nlink--;
 		cout<<"Number of links after unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
+	}
+	else if(ilist.entry[fHandle].metadata.st_nlink == 0 && opens == 0){
+		ilist.entry.erase(fHandle);
+		cout << "File unlinked and deleted. " << endl << endl;
 	}
 
 	//if number of links <0 then delete the file? payne said don't have to do
@@ -1515,15 +1521,15 @@ int main(int argc, char* argv[] ) {
 
 				my_chown(file.c_str(), uid, gid);
 			}
-			else if(op == "chmod"){
+		else if(op == "chmod"){
 				cout<< "Specify new file permissions in octal: ";
 				mode_t m;
 				(myin.good() ? myin : cin) >> oct >> m;
 				
 				record << oct << m << endl;
 				my_chmod(file.c_str(), m);
-			}
-			else if(op == "access"){
+		}
+		else if(op == "access"){
 
 				cout<< "Specify permissions to check: ";
 				mode_t m;
@@ -1539,8 +1545,17 @@ int main(int argc, char* argv[] ) {
 					cout<<"Failure.\n";
 				}
 
+		}
+		else if(op == "unlink"){
+			int a = my_unlink(file.c_str());	
+			
+			if(a == 0){
+				cout << "Success! " << endl;
 			}
-		
+			else{
+				cout << "Failure! " << endl;
+			}
+		}
 		else {
 			cout << "Correct usage is: op pathname,\n"; 
 			cout << "where \"op\" is one of the following:\n";
