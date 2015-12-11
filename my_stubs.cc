@@ -75,7 +75,6 @@ const int DELETED = INT_MAX;
 // name.
 #define cdbg cerr <<"\nLn "<<dec<<  __LINE__ << " of "  << __FUNCTION__ << ": "
 
-map< ino_t,int > open_files;
 string cwd;   // to hold name of current working directory but not used yet.
 
 // Function prototypes
@@ -571,44 +570,25 @@ int my_open( const char *path, int flags ) {
 	// Takes full path and returns handle of inode with name
 	ino_t fHandle = find_ino(path);
 
-	// If the file has been deleted
-	if(ilist.entry[fHandle].metadata.st_ino == DELETED) {
-		cerr << "Error: attempting to open deleted file\n";
-		cout << "Path: " << path << endl;
-
-		return -1;
-	}
-	else if( fHandle > 2 ) {
+	
+	if(fHandle >=0 ) {
 		cout << "File is open\n";
 		cout << "File Handle: " << fHandle << endl;
-
-		if(open_files.find(fHandle) != open_files.end()) {
-			cout << "Adding to open_files.at(fHandle)\n";
-			cout << open_files.at(fHandle) << endl;
-
-			++ open_files.at(fHandle); 
-
-			cout << "Added to open_files.at(fHandle)\n";
-			cout << open_files.at(fHandle) << endl;
-		}
-		else { // File not in open file list, hence add
-			open_files.insert(std::pair<ino_t, int >(fHandle, 1));
-			cout << "Updated openfiles.at(fHandle):\n";
-			cout << open_files.at(fHandle) << endl;
-		}
+	
+		ilist.entry[fHandle].metadata.st_nlink++;
 		return fHandle;
 	}
 	else if( flags & O_CREAT ) {
 		mode_t mode = 0644;
-		my_creat(path, mode);
+
+		int error = my_creat(path, mode);
+		if(error == -1){
+			return an_err;
+		}
 
 		fHandle = find_ino(path);
 		cout << "File successfully created and opened\n";
 		cout << "File Handle: " << fHandle << endl;
-
-		open_files.insert(std::pair<ino_t, int> (fHandle, 1));
-		cout << "Updated openfiles.at(fHandle):\n";
-		cout << open_files.at(fHandle) << endl;
 
 		return fHandle;
 	}
@@ -616,7 +596,7 @@ int my_open( const char *path, int flags ) {
 		cerr << "Error: file didn't open\n";
 		cout << "Path: " << path << endl;
 
-		return -1;
+		return an_err;
 	}
 	return 0;
 }
@@ -632,9 +612,7 @@ int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
 		return 0;
 	}
 
-	mode_t m = ilist.entry[fHandle].metadata.st_mode;
-
-	if(S_ISREG(m) && (m &  S_IRUSR)) {
+	if(S_ISREG(ilist.entry[fHandle].metadata.st_mode) && (ilist.entry[fHandle].metadata.st_mode &  S_IRUSR)) {
 		int i;  
 		for(i = 0; i < size; i++) {
 			if(ilist.entry[fHandle].data[off + i] == '\0') {
@@ -730,35 +708,17 @@ int my_statvfs(const char *fpath, struct statvfs *statv) {
 // called at line #530 of bbfs.c
 int my_close( int fHandle ) {
   //check for valid file handle
-  if ( fHandle > 2 )
-  {
-    cout << "Closing file, fHandle: " << fHandle << endl;
-    //search open_file map for fHandle
-    //returns map::end() if nothing found
-    std::map<ino_t,int>::iterator search_result;
-    search_result = open_files.find(fHandle);
-    if(search_result  != open_files.end())
-    {
-        cout << "before close .at(fHandle): " << open_files.at(fHandle) << endl;
-        open_files.at(fHandle) = open_files.at(fHandle) -1;
-        cout << "after close .at(fHandle): " << open_files.at(fHandle) << endl;
-    }
-    else if(search_result == open_files.end())
-    {
-     cout << "File with fHandle: \"" << fHandle << "\" not found.\n";
-     return an_err;
-    }
-    //if no more files open remove file from open_files map
-    if(open_files.at(fHandle) <= 0)
-    {
-        //remove file from open_files map
-        cout << "Removing file with fHandle: \"" << fHandle << "\" from open_files." << endl;;
-        open_files.erase(search_result);
-    }
-    return 0;
+  if(fHandle == 0){
+	  return an_err;
   }
-  return an_err;
+  
+   cout << "Closing file, fHandle: " << fHandle << endl;
+   ilist.entry[fHandle].metadata.st_nlink--;
+   if(ilist.entry[fHandle].metadata.st_nlink == 0){
+	   ilist.entry.erase(fHandle);
+   }
 
+   return 0;
 }  
 
 // called at line #553 of bbfs.c
@@ -826,9 +786,9 @@ int my_access( const char *fpath, int mask ) {
 int my_creat( const char *fpath, mode_t mode ) {
 	ino_t fHandle = find_ino(fpath);
 	if(fHandle == 0) {
-		// Success message and path to file
 		cout << "File created successfully\n";
 		cout << "Path: " << fpath << endl;
+
 		mode_t m = (S_IFREG | mode);
 		dev_t  d = 100; // Arbitrary selection 
 		int    n = my_mknod(fpath, m, d); 
@@ -839,7 +799,7 @@ int my_creat( const char *fpath, mode_t mode ) {
 		cout << "Error: file exists\n";
 		cout << "Path: " << fpath << endl;
 
-		return -1;
+		return an_err;
 	}
 	return 0;
 }  
