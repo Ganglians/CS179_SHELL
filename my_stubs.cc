@@ -499,6 +499,10 @@ int my_link(const char *path, const char *newpath) {
 	dirent d;
 	d.d_ino = fh;
 	strcpy( d.d_name, tail.c_str() );
+	dirent_frame df;
+
+	df.the_dirent = d;
+	ilist.entry[fh2].dentries.push_back(df);
 	return ok;  
 }  
 
