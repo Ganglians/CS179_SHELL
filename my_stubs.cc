@@ -535,7 +535,10 @@ int my_chmod(const char *path, mode_t mode) {
 	struct stat st = ilist.entry[fh].metadata;
 
 	if (fh > 2 && (st.st_mode & S_IWUSR)){ //file exists
+		cout<<"The old permissions are: " << ilist.entry[fh].metadata.st_mode<<endl;
 		ilist.entry[fh].metadata.st_mode = mode;
+		cout<<"The updated permissions are: " << ilist.entry[fh].metadata.st_mode<<endl;
+
 		return 0;
 	}
 	cout << path << " does not exist\n";
