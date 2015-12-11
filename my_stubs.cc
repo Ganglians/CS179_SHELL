@@ -75,7 +75,6 @@ const int DELETED = INT_MAX;
 // name.
 #define cdbg cerr <<"\nLn "<<dec<<  __LINE__ << " of "  << __FUNCTION__ << ": "
 
-map< ino_t,int > open_files;
 string cwd;   // to hold name of current working directory but not used yet.
 
 // Function prototypes
@@ -576,18 +575,7 @@ int my_open( const char *path, int flags ) {
 		cout << "File is open\n";
 		cout << "File Handle: " << fHandle << endl;
 	
-		//adds to the openfile list at fHandle if it is not found at the end
-		if(open_files.find(fHandle) != open_files.end()) {
-			++ open_files.at(fHandle); 
-		}
-		//must handle when not in the file list at all,
-		//adds directly to front of the list
-		else { 
-			open_files.insert(std::pair<ino_t, int >(fHandle, 1));
-		}
-		cout << "Updated openfiles.at(fHandle):\n";
-		cout << open_files.at(fHandle) << endl;
-
+		ilist.entry[fHandle].metadata.st_nlink++;
 		return fHandle;
 	}
 	else if( flags & O_CREAT ) {
@@ -601,10 +589,6 @@ int my_open( const char *path, int flags ) {
 		fHandle = find_ino(path);
 		cout << "File successfully created and opened\n";
 		cout << "File Handle: " << fHandle << endl;
-
-		open_files.insert(std::pair<ino_t, int> (fHandle, 1));
-		cout << "Updated openfiles.at(fHandle):\n";
-		cout << open_files.at(fHandle) << endl;
 
 		return fHandle;
 	}
@@ -628,9 +612,7 @@ int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
 		return 0;
 	}
 
-	mode_t m = ilist.entry[fHandle].metadata.st_mode;
-
-	if(S_ISREG(m) && (m &  S_IRUSR)) {
+	if(S_ISREG(ilist.entry[fHandle].metadata.st_mode) && (ilist.entry[fHandle].metadata.st_mode &  S_IRUSR)) {
 		int i;  
 		for(i = 0; i < size; i++) {
 			if(ilist.entry[fHandle].data[off + i] == '\0') {
@@ -695,26 +677,11 @@ int my_close( int fHandle ) {
   }
   
    cout << "Closing file, fHandle: " << fHandle << endl;
-
-   if(open_files.find(fHandle) != open_files.end())
-   {
-	   cout << "before close: " << open_files.at(fHandle) << endl;
-       open_files.at(fHandle) = open_files.at(fHandle) -1;
-       cout << "after close: " << open_files.at(fHandle) << endl;
+   ilist.entry[fHandle].metadata.st_nlink--;
+   if(ilist.entry[fHandle].metadata.st_nlink == 0){
+	   ilist.entry.erase(fHandle);
    }
 
-   else if(open_files.find(fHandle) == open_files.end())
-   {
-    cout << "File not found\n"; 
-    return an_err;
-   }
-
-   //if no more files open remove file from open_files map
-   if(open_files.at(fHandle) <= 0)
-   {
-       cout << "Removing file fHandle: \"" << fHandle << "\" from openfiles list." << endl;;
-       open_files.erase(search_result);
-   }
    return 0;
 }  
 
@@ -783,9 +750,9 @@ int my_access( const char *fpath, int mask ) {
 int my_creat( const char *fpath, mode_t mode ) {
 	ino_t fHandle = find_ino(fpath);
 	if(fHandle == 0) {
-		// Success message and path to file
 		cout << "File created successfully\n";
 		cout << "Path: " << fpath << endl;
+
 		mode_t m = (S_IFREG | mode);
 		dev_t  d = 100; // Arbitrary selection 
 		int    n = my_mknod(fpath, m, d); 
@@ -796,7 +763,7 @@ int my_creat( const char *fpath, mode_t mode ) {
 		cout << "Error: file exists\n";
 		cout << "Path: " << fpath << endl;
 
-		return -1;
+		return an_err;
 	}
 	return 0;
 }  
