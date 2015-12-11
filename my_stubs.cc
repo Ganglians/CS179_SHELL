@@ -624,9 +624,7 @@ int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
 		return i;
 	}
 	else {
-		uid_t cur_uid = geteuid(); 
-		cout << "Current user: " << getpwuid(cur_uid)->pw_name  
-			<< " does not have permission to read from this file.\n";
+		cout << "Current user  doesn't have permission to read from this file.\n";
 		return 0;
 	}  
 }  
