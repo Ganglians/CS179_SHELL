@@ -70,6 +70,9 @@ using namespace std;
 
 const int DELETED = INT_MAX;
 
+
+struct dirent_frame erase_path(const char* path);
+
 // Here is a convenient macro for debugging.  cdbg works like cerr but 
 // prefixes the error message with its location: line number and function
 // name.
@@ -346,7 +349,15 @@ int my_unlink( const char *path ) {
 	}
 	vector<string> s = split(string(path), "/");
 	string fName = s.back();
-	string newpath = join(s, "/");
+	s.pop_back();
+
+	string dirpath = "/";
+
+	if(!s.empty()){
+		dirpath = join(s, "/");
+	}
+
+	ino_t dirh = find_ino(dirpath);
 
 	int opens = ilist.entry[fHandle].number_of_opens;
 
@@ -356,12 +367,15 @@ int my_unlink( const char *path ) {
 		ilist.entry[fHandle].metadata.st_nlink--;
 		cout<<"Number of links after unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
 	}
-	else if(ilist.entry[fHandle].metadata.st_nlink == 0 && opens == 0){
+	
+	if(ilist.entry[fHandle].metadata.st_nlink == 0 && opens == 0){
 		ilist.entry.erase(fHandle);
+
+		erase_path(path);
+
 		cout << "File unlinked and deleted. " << endl << endl;
 	}
 
-	//if number of links <0 then delete the file? payne said don't have to do
 	return 0;
 }
 // called at line #220 of bbfs.c
@@ -511,14 +525,25 @@ int my_rename( const char *path, const char *newpath ) {
 int my_link(const char *path, const char *newpath) {
 	vector<string> v = split(string(newpath),"/");
 	string tail = v.back();
-	string dirpath = join(v, "/");
+	v.pop_back();
+
+	string dirpath = "/";
+
+	if(v.size() != 0){
+		dirpath = join(v, "/");
+	}
+
 	ino_t fh = find_ino(path);
-	if ( ! S_ISDIR( ilist.entry[fh].metadata.st_mode ) ) {
+	if (  S_ISDIR( ilist.entry[fh].metadata.st_mode ) ) {
 		errno = EPERM; 
 		return an_err; 
 	}
+
+	ino_t dirh = find_ino(dirpath);
+
 	ino_t fh2 = find_ino(newpath);
-	if ( ! S_ISDIR( ilist.entry[fh2].metadata.st_mode ) ) {
+
+	if (  S_ISDIR( ilist.entry[fh2].metadata.st_mode ) ) {
 		errno = EPERM; 
 		return an_err; 
 	}
@@ -530,7 +555,8 @@ int my_link(const char *path, const char *newpath) {
 	dirent_frame df;
 
 	df.the_dirent = d;
-	ilist.entry[fh2].dentries.push_back(df);
+	ilist.entry[dirh].dentries.push_back(df);
+
 	return ok;  
 }  
 
