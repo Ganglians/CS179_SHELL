@@ -102,6 +102,7 @@ class File {
 		string data;                          // for use by regular files
 		vector<dirent_frame> dentries;        // for use by directories
 		// list<dirent_frame> dentries;        // it'd be cleaner to make this a list
+		int number_of_opens;
 };
 
 class Ilist {
@@ -317,6 +318,7 @@ int my_mknod( const char *path, mode_t mode, dev_t dev ) {
 	}
 	else if ( S_ISREG(mode) ) {
 		ilist.entry[the_ino].data = "[insert text here]"; // ???
+		ilist.entry[the_ino].number_of_opens = 0;
 	}
 	return ok;
 }  
@@ -332,29 +334,29 @@ int my_mkdir( const char *path, mode_t mode ) {
 
 // called at line #203 of bbfs.cg
 int my_unlink( const char *path ) {
-    ino_t fHandle = find_ino(path);
-    if(fHandle == 0){//check if it exists
-        cout << "The file has not been found\n";
-        return an_err;
-    }
-    //check to make sure its a file
-    if(!S_ISREG(ilist.entry[fHandle].metadata.st_mode) ){
-        cout<<"This is not a file\n";
-        return an_err;
-    }
-    vector<string> s = split(string(path), "/");
-    string fName = s.back();
-    string newpath = join(s, "/");
+	ino_t fHandle = find_ino(path);
+	if(fHandle == 0){//check if it exists
+		cout << "The file has not been found\n";
+		return an_err;
+	}
+	//check to make sure its a file
+	if(!S_ISREG(ilist.entry[fHandle].metadata.st_mode) ){
+		cout<<"This is not a file\n";
+		return an_err;
+	}
+	vector<string> s = split(string(path), "/");
+	string fName = s.back();
+	string newpath = join(s, "/");
 
-    //decrease number of links
-    if(ilist.entry[fHandle].metadata.st_nlink >0){
-	cout<<"Number of links before unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
-        ilist.entry[fHandle].metadata.st_nlink--;
-        cout<<"Number of links after unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
-    }
+	//decrease number of links
+	if(ilist.entry[fHandle].metadata.st_nlink >0){
+		cout<<"Number of links before unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
+		ilist.entry[fHandle].metadata.st_nlink--;
+		cout<<"Number of links after unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
+	}
 
-    //if number of links <0 then delete the file? payne said don't have to do
-  return 0;
+	//if number of links <0 then delete the file? payne said don't have to do
+	return 0;
 }
 // called at line #220 of bbfs.c
 int my_rmdir( const char *path ) {
@@ -442,7 +444,7 @@ struct dirent_frame erase_path(const char* path){
 	ino_t fh_parent = find_ino(parent_path);
 
 	vector<dirent_frame>::iterator it_v = ilist.entry[fh_parent].dentries.begin();
-	
+
 	struct dirent_frame erased; 
 
 	for(; it_v != ilist.entry[fh_parent].dentries.end(); it_v++){
@@ -475,7 +477,7 @@ int my_rename( const char *path, const char *newpath ) {
 
 	string new_name = v.back();
 
-//	cout << "NEWPATH : " << newpath << endl;	
+	//	cout << "NEWPATH : " << newpath << endl;	
 
 	v.pop_back();
 
@@ -485,7 +487,7 @@ int my_rename( const char *path, const char *newpath ) {
 
 	string parent_path = join(v, "/");
 
-//	cout << "PARENT_PATH : " << parent_path << endl;
+	//	cout << "PARENT_PATH : " << parent_path << endl;
 
 	ino_t parent_fh = find_ino(parent_path);
 
@@ -542,17 +544,17 @@ int my_chmod(const char *path, mode_t mode) {
 
 // called at line #314 of bbfs.c
 int my_chown(const char *path, uid_t uid, gid_t gid) {
-  ino_t fh = find_ino(path);
+	ino_t fh = find_ino(path);
 
 	struct stat st = ilist.entry[fh].metadata;
 
-  if(fh > 2 && (st.st_mode & S_IWUSR)) { //file exists
-    ilist.entry[fh].metadata.st_uid = uid;
-    ilist.entry[fh].metadata.st_gid = gid;
-    return 0;
-  }
-  cout << path << " does not exist\n";
-  return an_err;
+	if(fh > 2 && (st.st_mode & S_IWUSR)) { //file exists
+		ilist.entry[fh].metadata.st_uid = uid;
+		ilist.entry[fh].metadata.st_gid = gid;
+		return 0;
+	}
+	cout << path << " does not exist\n";
+	return an_err;
 }
 
 // called at line #331 of bbfs.c
@@ -570,12 +572,13 @@ int my_open( const char *path, int flags ) {
 	// Takes full path and returns handle of inode with name
 	ino_t fHandle = find_ino(path);
 
-	
-	if(fHandle >=0 ) {
-		cout << "File is open\n";
+	if(fHandle >= 2 ) {
+		cout << "File is open" << endl;
 		cout << "File Handle: " << fHandle << endl;
-	
-		ilist.entry[fHandle].metadata.st_nlink++;
+
+		ilist.entry[fHandle].number_of_opens++;
+
+		//ilist.entry[fHandle].metadata.st_nlink++;
 		return fHandle;
 	}
 	else if( flags & O_CREAT ) {
@@ -598,6 +601,7 @@ int my_open( const char *path, int flags ) {
 
 		return an_err;
 	}
+
 	return 0;
 }
 
@@ -675,8 +679,12 @@ int my_close( int fHandle ) {
 	}
 
 	cout << "Closing file, fHandle: " << fHandle << endl;
-	ilist.entry[fHandle].metadata.st_nlink--;
-	if(ilist.entry[fHandle].metadata.st_nlink == 0){
+	//ilist.entry[fHandle].metadata.st_nlink--;
+	ilist.entry[fHandle].number_of_opens--;
+
+	int opens = ilist.entry[fHandle].number_of_opens;
+
+	if(ilist.entry[fHandle].metadata.st_nlink == 0 && opens == 0){
 		ilist.entry.erase(fHandle);
 	}
 
