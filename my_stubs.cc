@@ -1437,16 +1437,6 @@ int main(int argc, char* argv[] ) {
 
 			int stat = my_pread(fHandle, buf, num_bytes, off);
 
-<<<<<<< HEAD
-			cout << endl << "Bytes read: " << stat << endl;
-			cout << "buf: " << buf << endl;
-		}
-		else if (op == "write") {
-			int fHandle = my_open(file.c_str(), O_RDONLY);
-			size_t num_bytes = 0;
-			off_t  off       = 0;
-			string s;
-=======
 				if(stat != -1){
 					cout << endl << "Bytes read: " << stat << endl;
 					cout << "buf: " << buf << endl;
@@ -1457,7 +1447,7 @@ int main(int argc, char* argv[] ) {
 				size_t num_bytes = 0;
 				off_t  off       = 0;
 				string s;
->>>>>>> 1effb6c486b8b89357b02f2483f74e0770bfcfe0
+
 
 			cout << "Enter string to write to file:\n";
 			cin.ignore();
@@ -1523,32 +1513,6 @@ int main(int argc, char* argv[] ) {
 			cout << "Enter new user id: ";
 			(myin.good() ? myin : cin) >> dec >> uid;
 
-<<<<<<< HEAD
-			cout << "Enter new group id: ";
-			(myin.good() ? myin : cin) >> dec >> gid;
-
-			my_chown(file.c_str(), uid, gid);
-		}
-		else if(op == "chmod"){
-			cout<< "Specify new file permissions in octal: ";
-			mode_t m;
-			(myin.good() ? myin : cin) >> dec >> m;
-
-			record << oct << m << endl;
-			my_chmod(file.c_str(), m);
-		}
-		else if(op == "access"){
-
-			cout<< "Specify permissions to check: ";
-			mode_t m;
-			(myin.good() ? myin : cin) >> dec >> m;
-
-			record << oct << m << endl;
-			int a = my_access(file.c_str(), m);
-
-			if(a == 0 ){
-				cout<<"Success\n";
-=======
 				my_chown(file.c_str(), uid, gid);
 			}
 			else if(op == "chmod"){
@@ -1574,12 +1538,9 @@ int main(int argc, char* argv[] ) {
 				else{
 					cout<<"Failure.\n";
 				}
->>>>>>> 1effb6c486b8b89357b02f2483f74e0770bfcfe0
+
 			}
-			else{
-				cout<<"Failure.\n";
-			}
-		}
+		
 		else {
 			cout << "Correct usage is: op pathname,\n"; 
 			cout << "where \"op\" is one of the following:\n";
