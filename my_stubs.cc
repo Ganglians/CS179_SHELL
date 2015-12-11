@@ -1383,7 +1383,6 @@ int visit( string root ) { // recursive visitor function, implements lslr
 				my_creat(file.c_str(), m);
 			}
 			else if (op == "open") { // executes my_open()
-				// Note: Default is RDONLY for testing
 				my_open(file.c_str(), O_RDONLY); 
 			}
 			else if (op == "read") {
@@ -1459,9 +1458,6 @@ int visit( string root ) { // recursive visitor function, implements lslr
 			}
 			else if(op == "rename"){
 				string new_path;
-				//char p [PATH_MAX];
-				//char *f = getcwd(p, PATH_MAX);
-				//string full_path = string(f);
 				cout << "Enter new path for file: ";
 				cin >> new_path;
 
@@ -1472,6 +1468,42 @@ int visit( string root ) { // recursive visitor function, implements lslr
 					cout << "Error!" << endl;
 				}
 
+			}
+			else if(op == "chown"){
+				uid_t uid;
+				gid_t gid;
+
+				cout << "Enter new user id: ";
+				(myin.good() ? myin : cin) >> dec >> uid;
+
+				cout << "Enter new group id: ";
+				(myin.good() ? myin : cin) >> dec >> gid;
+
+				my_chown(file.c_str(), uid, gid);
+			}
+			else if(op == "chmod"){
+				cout<< "Specify new file permissions in octal: ";
+				mode_t m;
+				(myin.good() ? myin : cin) >> dec >> m;
+				
+				record << oct << m << endl;
+				my_chmod(file.c_str(), m);
+			}
+			else if(op == "access"){
+
+				cout<< "Specify permissions to check: ";
+				mode_t m;
+				(myin.good() ? myin : cin) >> dec >> m;
+				
+				record << oct << m << endl;
+				int a = my_access(file.c_str(), m);
+
+				if(a == 0 ){
+					cout<<"Success\n";
+				}
+				else{
+					cout<<"Failure.\n";
+				}
 			}
 			else {
 				cout << "Correct usage is: op pathname,\n"; 
