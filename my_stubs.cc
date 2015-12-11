@@ -565,36 +565,32 @@ int my_open( const char *path, int flags ) {
 	// Takes full path and returns handle of inode with name
 	ino_t fHandle = find_ino(path);
 
-	// If the file has been deleted
-	if(ilist.entry[fHandle].metadata.st_ino == DELETED) {
-		cerr << "Error: attempting to open deleted file\n";
-		cout << "Path: " << path << endl;
-
-		return -1;
-	}
-	else if( fHandle > 2 ) {
+	
+	if(fHandle >=0 ) {
 		cout << "File is open\n";
 		cout << "File Handle: " << fHandle << endl;
-
+	
+		//adds to the openfile list at fHandle if it is not found at the end
 		if(open_files.find(fHandle) != open_files.end()) {
-			cout << "Adding to open_files.at(fHandle)\n";
-			cout << open_files.at(fHandle) << endl;
-
 			++ open_files.at(fHandle); 
-
-			cout << "Added to open_files.at(fHandle)\n";
-			cout << open_files.at(fHandle) << endl;
 		}
-		else { // File not in open file list, hence add
+		//must handle when not in the file list at all,
+		//adds directly to front of the list
+		else { 
 			open_files.insert(std::pair<ino_t, int >(fHandle, 1));
-			cout << "Updated openfiles.at(fHandle):\n";
-			cout << open_files.at(fHandle) << endl;
 		}
+		cout << "Updated openfiles.at(fHandle):\n";
+		cout << open_files.at(fHandle) << endl;
+
 		return fHandle;
 	}
 	else if( flags & O_CREAT ) {
 		mode_t mode = 0644;
-		my_creat(path, mode);
+
+		int error = my_creat(path, mode);
+		if(error == -1){
+			return an_err;
+		}
 
 		fHandle = find_ino(path);
 		cout << "File successfully created and opened\n";
@@ -610,7 +606,7 @@ int my_open( const char *path, int flags ) {
 		cerr << "Error: file didn't open\n";
 		cout << "Path: " << path << endl;
 
-		return -1;
+		return an_err;
 	}
 	return 0;
 }
@@ -688,35 +684,32 @@ int my_statvfs(const char *fpath, struct statvfs *statv) {
 // called at line #530 of bbfs.c
 int my_close( int fHandle ) {
   //check for valid file handle
-  if ( fHandle > 2 )
-  {
-    cout << "Closing file, fHandle: " << fHandle << endl;
-    //search open_file map for fHandle
-    //returns map::end() if nothing found
-    std::map<ino_t,int>::iterator search_result;
-    search_result = open_files.find(fHandle);
-    if(search_result  != open_files.end())
-    {
-        cout << "before close .at(fHandle): " << open_files.at(fHandle) << endl;
-        open_files.at(fHandle) = open_files.at(fHandle) -1;
-        cout << "after close .at(fHandle): " << open_files.at(fHandle) << endl;
-    }
-    else if(search_result == open_files.end())
-    {
-     cout << "File with fHandle: \"" << fHandle << "\" not found.\n";
-     return an_err;
-    }
-    //if no more files open remove file from open_files map
-    if(open_files.at(fHandle) <= 0)
-    {
-        //remove file from open_files map
-        cout << "Removing file with fHandle: \"" << fHandle << "\" from open_files." << endl;;
-        open_files.erase(search_result);
-    }
-    return 0;
+  if(fHandle == 0){
+	  return an_err;
   }
-  return an_err;
+  
+   cout << "Closing file, fHandle: " << fHandle << endl;
 
+   if(open_files.find(fHandle) != open_files.end())
+   {
+	   cout << "before close: " << open_files.at(fHandle) << endl;
+       open_files.at(fHandle) = open_files.at(fHandle) -1;
+       cout << "after close: " << open_files.at(fHandle) << endl;
+   }
+
+   else if(open_files.find(fHandle) == open_files.end())
+   {
+    cout << "File not found\n"; 
+    return an_err;
+   }
+
+   //if no more files open remove file from open_files map
+   if(open_files.at(fHandle) <= 0)
+   {
+       cout << "Removing file fHandle: \"" << fHandle << "\" from openfiles list." << endl;;
+       open_files.erase(search_result);
+   }
+   return 0;
 }  
 
 // called at line #553 of bbfs.c
