@@ -333,9 +333,30 @@ int my_mkdir( const char *path, mode_t mode ) {
 
 // called at line #203 of bbfs.cg
 int my_unlink( const char *path ) {
-	return 0;
-}  
+    ino_t fHandle = find_ino(path);
+    if(fHandle == 0){//check if it exists
+        cout << "The file has not been found\n";
+        return an_err;
+    }
+    //check to make sure its a file
+    if(!S_ISREG(ilist.entry[fHandle].metadata.st_mode) ){
+        cout<<"This is not a file\n";
+        return an_err;
+    }
+    vector<string> s = split(string(path), "/");
+    string fName = s.back();
+    string newpath = join(s, "/");
 
+    //decrease number of links
+    if(ilist.entry[fHandle].metadata.st_nlink >0){
+	cout<<"Number of links before unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
+        ilist.entry[fHandle].metadata.st_nlink--;
+        cout<<"Number of links after unlink: "<<  ilist.entry[fHandle].metadata.st_nlink << endl;
+    }
+
+    //if number of links <0 then delete the file? payne said don't have to do
+  return 0;
+}
 // called at line #220 of bbfs.c
 int my_rmdir( const char *path ) {
 	// See http://linux.die.net/man/2/rmdir for a full list of all 13
