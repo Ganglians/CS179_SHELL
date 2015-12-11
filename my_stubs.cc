@@ -544,13 +544,26 @@ int my_chmod(const char *path, mode_t mode) {
 
 // called at line #314 of bbfs.c
 int my_chown(const char *path, uid_t uid, gid_t gid) {
+	if(uid<0 || gid<0 ){
+		cerr<<"Incorrect input";
+		return an_err;
+	}
 	ino_t fh = find_ino(path);
 
 	struct stat st = ilist.entry[fh].metadata;
 
+	cout << "User id before change: " << ilist.entry[fh].metadata.st_uid <<endl;
+	cout << "Group id before change: " << ilist.entry[fh].metadata.st_gid <<endl;
+
+
+
 	if(fh > 2 && (st.st_mode & S_IWUSR)) { //file exists
 		ilist.entry[fh].metadata.st_uid = uid;
 		ilist.entry[fh].metadata.st_gid = gid;
+
+		cout << "User id after change: " << ilist.entry[fh].metadata.st_uid <<endl;
+		cout << "Group id after change: " << ilist.entry[fh].metadata.st_gid <<endl;
+
 		return 0;
 	}
 	cout << path << " does not exist\n";
@@ -1461,8 +1474,8 @@ int visit( string root ) { // recursive visitor function, implements lslr
 
 			}
 			else if(op == "chown"){
-				uid_t uid;
-				gid_t gid;
+				uid_t uid = 0;
+				gid_t gid = 0;
 
 				cout << "Enter new user id: ";
 				(myin.good() ? myin : cin) >> dec >> uid;
