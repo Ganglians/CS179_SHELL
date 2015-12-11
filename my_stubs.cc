@@ -1368,7 +1368,6 @@ int visit( string root ) { // recursive visitor function, implements lslr
 				my_creat(file.c_str(), m);
 			}
 			else if (op == "open") { // executes my_open()
-				// Note: Default is RDONLY for testing
 				my_open(file.c_str(), O_RDONLY); 
 			}
 			else if (op == "read") {
