@@ -534,10 +534,10 @@ int my_chmod(const char *path, mode_t mode) {
 
 	struct stat st = ilist.entry[fh].metadata;
 
-	if (fh > 2 && (st.st_mode & S_IWUSR)){ //file exists
-		cout<<"The old permissions are: " << ilist.entry[fh].metadata.st_mode<<endl;
+	if (fh > 2 ){ //file exists
+		cout<<"The old permissions are: " << oct << ilist.entry[fh].metadata.st_mode<<endl;
 		ilist.entry[fh].metadata.st_mode = mode;
-		cout<<"The updated permissions are: " << ilist.entry[fh].metadata.st_mode<<endl;
+		cout<<"The updated permissions are: " <<oct<< ilist.entry[fh].metadata.st_mode<<endl;
 
 		return 0;
 	}
@@ -634,6 +634,7 @@ int my_pread( int fh, char *buf, size_t size, off_t offset ) {
 	File temp = ilist.entry[fh];
 
 	if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IRUSR)){
+		cout<<"Cannot read from file\n";
 		return an_err;
 	}
 
@@ -660,12 +661,14 @@ int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
 	File temp = ilist.entry[fh];
 
 	if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IWUSR)){
+		cout<<"Can't write to file specified\n";
 		return an_err;
 	}
 
 	string data = temp.data;
 
 	if(offset < 0 || offset >= data.size()){
+		cout<<"offset is out of bounds\n";
 		return an_err;
 	}
 
@@ -758,22 +761,34 @@ int my_access( const char *fpath, int mask ) {
 		return an_err;
 	}
 
-	if( (st.st_mode & S_IRUSR) && (mask & S_IRUSR))
+	if( (st.st_mode & S_IRUSR) && (mask & S_IRUSR)){
+		cout<<"Can read file\n";
 		return 0;
-	else if(!(st.st_mode & S_IRUSR) && (mask & S_IRUSR))
+	}
+	else if(!(st.st_mode & S_IRUSR) && (mask & S_IRUSR)){
+		cout<<"Cannot read file\n";
 		return an_err;
+	}
 
 
-	if( (st.st_mode & S_IWUSR) && (mask & S_IWUSR))
+	if( (st.st_mode & S_IWUSR) && (mask & S_IWUSR)){
+		cout<<"Can write to file\n";
 		return 0;
-	else if(!(st.st_mode & S_IWUSR) && (mask & S_IWUSR))
+	}
+	else if(!(st.st_mode & S_IWUSR) && (mask & S_IWUSR)){
+		cout<<"Cannot write to file\n";
 		return an_err;
+	}
 
 
-	if( (st.st_mode & S_IXUSR) && (mask & S_IXUSR))
+	if( (st.st_mode & S_IXUSR) && (mask & S_IXUSR)){
+		cout<<"Can execute file\n";
 		return 0;
-	else if(!(st.st_mode & S_IXUSR) && (mask & S_IXUSR))
+	}
+	else if(!(st.st_mode & S_IXUSR) && (mask & S_IXUSR)){
+		cout<<"Cannot execute file\n";
 		return an_err;
+	}
 
 	return an_err;
 } 
@@ -1420,8 +1435,10 @@ int visit( string root ) { // recursive visitor function, implements lslr
 
 				int stat = my_pread(fHandle, buf, num_bytes, off);
 
-				cout << endl << "Bytes read: " << stat << endl;
-				cout << "buf: " << buf << endl;
+				if(stat != -1){
+					cout << endl << "Bytes read: " << stat << endl;
+					cout << "buf: " << buf << endl;
+				}
 			}
 			else if (op == "write") {
 				int fHandle = my_open(file.c_str(), O_RDONLY);
@@ -1501,7 +1518,7 @@ int visit( string root ) { // recursive visitor function, implements lslr
 			else if(op == "chmod"){
 				cout<< "Specify new file permissions in octal: ";
 				mode_t m;
-				(myin.good() ? myin : cin) >> dec >> m;
+				(myin.good() ? myin : cin) >> oct >> m;
 				
 				record << oct << m << endl;
 				my_chmod(file.c_str(), m);
@@ -1510,7 +1527,7 @@ int visit( string root ) { // recursive visitor function, implements lslr
 
 				cout<< "Specify permissions to check: ";
 				mode_t m;
-				(myin.good() ? myin : cin) >> dec >> m;
+				(myin.good() ? myin : cin) >> oct >> m;
 				
 				record << oct << m << endl;
 				int a = my_access(file.c_str(), m);
