@@ -654,7 +654,7 @@ int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
 }  
 
 // called at line #439 of bbfs.c  Note that our first arg is an fh not an fd
-int my_pwrite( int fHandle, const char *buf, size_t size, off_t off ) {
+/*int my_pwrite( int fHandle, const char *buf, size_t size, off_t off ) {
 	//if off is larger than file size return error
 	if(off < 0 || ilist.entry[fHandle].data.size() < off) {
 		return an_err;
@@ -684,7 +684,43 @@ int my_pwrite( int fHandle, const char *buf, size_t size, off_t off ) {
 		cout << " does not have permission to write to this file.\n";
 		return 0;
 	}
-}  
+} */
+
+int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
+ 
+     if(size == 0){
+         return an_err;
+     }
+
+
+         File temp = ilist.entry[fh];
+ 
+         if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IWUSR)){
+             return an_err;
+         }
+ 
+         string data = temp.data;
+ 
+         if(offset < 0 || offset >= data.size()){
+             return an_err;
+         }
+ 
+         string first_half = data.substr(0, offset);
+ 
+         string second_half = "";
+ 
+         if(offset + size < data.size()){
+             second_half = data.substr(offset + size);
+         }
+ 
+         string buff(buf, buf + size);
+ 
+         ilist.entry[fh].data = first_half + buff + second_half;
+
+	cout << "ENTIRE STRING: " <<  ilist.entry[fh].data << endl;
+ 
+         return size;
+ }  
 
 // called at line #463 of bbfs.c
 int my_statvfs(const char *fpath, struct statvfs *statv) {
