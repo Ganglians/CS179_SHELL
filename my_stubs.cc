@@ -739,14 +739,24 @@ int my_access( const char *fpath, int mask ) {
 		cout << "Cannont stat file " << fpath << endl;
 		return -1;
 	}
-	if( (st.st_mode & S_IRUSR) != (mask & S_IRUSR))
-		return -1;
-	if( (st.st_mode & S_IWUSR) != (mask & S_IWUSR))
-		return -1;
-	if( (st.st_mode & S_IXUSR) != (mask & S_IXUSR))
+	if( (st.st_mode & S_IRUSR) && (mask & S_IRUSR))
+		return 0;
+	else if(!(st.st_mode & S_IRUSR) && (mask & S_IRUSR))
 		return -1;
 
-	return 0;
+
+	if( (st.st_mode & S_IWUSR) && (mask & S_IWUSR))
+		return 0;
+	else if(!(st.st_mode & S_IWUSR) && (mask & S_IWUSR))
+		return -1;
+
+
+	if( (st.st_mode & S_IXUSR) && (mask & S_IXUSR))
+		return 0;
+	else if(!(st.st_mode & S_IXUSR) && (mask & S_IXUSR))
+		return -1;
+
+	return -1;
 } 
 
 // called at line #856 of bbfs.c
