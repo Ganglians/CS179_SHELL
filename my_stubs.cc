@@ -601,33 +601,31 @@ int my_open( const char *path, int flags ) {
 	return 0;
 }
 
-// called at line #411 of bbfs.c  Note that our first arg is an fh not an fd
-int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
 
-	if(off < 0 || ilist.entry[fHandle].data.size() < off) {
+int my_pread( int fh, char *buf, size_t size, off_t offset ) {
+
+	if(size <= 0 || offset < 0){
 		return an_err;
-	}   
-
-	if(off == ilist.entry[fHandle].data.size() - 1) {
-		return 0;
 	}
 
-	if(S_ISREG(ilist.entry[fHandle].metadata.st_mode) && (ilist.entry[fHandle].metadata.st_mode &  S_IRUSR)) {
-		int i;  
-		for(i = 0; i < size; i++) {
-			if(ilist.entry[fHandle].data[off + i] == '\0') {
-				cout << "data[off+i]: " << ilist.entry[fHandle].data[off + i] << endl;
-				break;
-			}
-			buf[i] = ilist.entry[fHandle].data[off + i];
-		}
-		return i;
+	File temp = ilist.entry[fh];
+
+	if(S_ISDIR(temp.metadata.st_mode) || !(temp.metadata.st_mode & S_IRUSR)){
+		return an_err;
 	}
-	else {
-		cout << "Current user  doesn't have permission to read from this file.\n";
-		return 0;
-	}  
-}  
+
+	string data = temp.data;
+
+	int bytes_read = 0;
+
+	for(int i = offset; i < offset + size && i < data.size(); i++){
+		buf[i - offset] = data.at(i);
+		bytes_read++;
+	}
+
+	return bytes_read;
+
+}    
 
 
 int my_pwrite( int fh, const char *buf, size_t size, off_t offset ) {
