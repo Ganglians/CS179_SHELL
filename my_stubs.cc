@@ -185,104 +185,6 @@ void show_stat( struct stat& root ) {
 	cerr << "st_ctime   = " << hex << root.st_ctime   << endl;  
 }; 
 
-bool check_permissions(ino_t fh, string operation) {
-	//check if valid fh has been given
-	if(fh < 2) { // || ilist.count < fh) 
-		cout << "Invalid fh.\n";
-		return false;
-	}
-
-	//current user's gid and uid
-	uid_t cur_uid = geteuid(); //Payne also uses this function when making files
-	gid_t cur_gid = getegid();  
-	//files gid and uid
-	uid_t file_owneruid = ilist.entry[fh].metadata.st_uid;
-	gid_t file_ownergid = ilist.entry[fh].metadata.st_gid;
-	mode_t file_permissions = ilist.entry[fh].metadata.st_mode; 
-
-	/* octal values for different flag permissions
-	 * will simply do a bitwise AND to determine if user has permissions
-	 * */
-	mode_t uread_mode = 400; //user_read
-	mode_t uwrite_mode = 200;//user_write
-	mode_t uexec_mode = 100;//User_exec
-	mode_t gread_mode = 040;//group read
-	mode_t gwrite_mode = 020;// group write
-	mode_t gexec_mode = 010;//group exec
-	mode_t oread_mode = 004;//other read
-	mode_t owrite_mode = 002;//other write
-	mode_t oexec_mode = 001;//other exec
-	mode_t result = 0; //value to return which will be converted to boolean value
-
-	//check if current user's uid matches with the file owners uid
-	bool is_owner = false;
-	if(cur_uid == file_owneruid) {
-		is_owner = true;   
-	}
-	else {
-		is_owner = false;
-	}
-
-	//check if the current user's gid matches with the file owners gid
-	bool is_group = false; 
-	if(cur_gid == file_ownergid) {
-		is_group =  true;
-	}
-	else {
-		is_group = false;
-	}
-	/* Depending on the operation given 
-	 * perform one of the following bitwise operations
-	 * using the file's permissions and the octal value for that permission.
-	 * A value can be converted to a boolean, where any value greater than 0
-	 * is considered true. Therefore if a file has given the permission
-	 * the result of the bitwise operation will be positive -> true.
-	 */
-	if(operation == "read") {
-		if(is_owner) {
-			//bitwise & using filepermission with user read permission value
-			return file_permissions&uread_mode;
-		}
-		else if(is_group) {
-			//bitwise & using filepermission with group read permission value
-			return file_permissions&gread_mode;
-		}
-		else {
-			//bitwise & using filepermission with other read permission value  
-			return file_permissions&oread_mode;   
-		}
-		return false;
-	}
-	else if(operation == "write") {
-		if(is_owner) {
-			return file_permissions&uwrite_mode;
-		}
-		else if(is_group) {
-			return file_permissions&gwrite_mode;
-		}
-		else {
-			return file_permissions&owrite_mode;   
-		}
-
-		return false;
-	}
-	else if(operation == "execute") {
-		if(is_owner) {
-			return file_permissions&uexec_mode;
-		}
-		else if(is_group) {
-			return file_permissions&gexec_mode;
-		}
-		else {
-			return file_permissions&oexec_mode;   
-		}
-		//won't need as we will not have executables 
-		//within our filesystem
-		return false;
-	}
-	return false;
-}
-
 inline vector<string> // A simple utility for splitting strings at a find-pattern.
 split(const string s, const string pat ) {
 	string c;
@@ -478,6 +380,7 @@ int my_symlink(const char *path, const char *link) {
 	return an_err;  
 }  
 
+//checks if the given path is a directory or not
 bool is_dir(const char* path){
 	ino_t fh = find_ino(path);
 
@@ -486,6 +389,7 @@ bool is_dir(const char* path){
 	return S_ISDIR(m);
 }
 
+//checks if the given path is a regular file
 bool is_reg(const char* path){
 	ino_t fh = find_ino(path);
 
@@ -494,10 +398,12 @@ bool is_reg(const char* path){
 	return S_ISREG(m);
 }
 
+//checks if the given path is a file itself
 bool is_real_file(const char* path){
 	return is_reg(path) || is_dir(path);		
 }
 
+//removes the given path from the dirents list
 struct dirent_frame erase_path(const char* path){
 	vector<string> v = split(string(path), "/");
 
@@ -507,10 +413,7 @@ struct dirent_frame erase_path(const char* path){
 
 	ino_t fh = find_ino(path);
 
-	//map<ino_t, File>::iterator it = ilist.entry.find(fh);
-	//ilist.entry.erase(it);
-
-	string parent_path = ""; //CHANGED
+	string parent_path = ""; 
 
 	if(!v.empty()){
 		string parent_path = join(v, "/");	
@@ -529,7 +432,6 @@ struct dirent_frame erase_path(const char* path){
 			break;
 		}
 	}
-
 	return erased;
 }
 
@@ -553,26 +455,17 @@ int my_rename( const char *path, const char *newpath ) {
 
 	string new_name = v.back();
 
-	cout << "NEWPATH : " << newpath << endl;	
-	//cout << "NEW NAME : " << new_name << endl;
-	//cout << "MOVED FILE: " << moved_file.the_dirent.d_name << endl;
+//	cout << "NEWPATH : " << newpath << endl;	
 
 	v.pop_back();
 
 
 	strcpy(moved_file.the_dirent.d_name, new_name.c_str());
 
-	//cout << "THE NEW NAME IS " << moved_file.the_dirent.d_name << endl;
 
 	string parent_path = join(v, "/");
 
-	//cout << "VECTOR SIZE IS  : " << v.size() << endl;
-
-//	if(v.size() == 1 && ){
-//		parent_path = ""; //CHANGED
-//	}
-
-	cout << "PARENT_PATH : " << parent_path << endl;
+//	cout << "PARENT_PATH : " << parent_path << endl;
 
 	ino_t parent_fh = find_ino(parent_path);
 
@@ -582,9 +475,7 @@ int my_rename( const char *path, const char *newpath ) {
 
 	for(int i = 0; i < d.size(); i++){
 		string name( d.at(i).the_dirent.d_name);
-
 	}
-
 	return 0;
 }
 
@@ -611,14 +502,6 @@ int my_link(const char *path, const char *newpath) {
 	return ok;  
 }  
 
-/* Change permissions of a file. The new file permissions of the file
-   are specified in [mode], which is a bit mask created by ORing together
-   zero or more of the following: S_ISUID(04000), S_ISGID(02000), ...
-   Return value: On sucess, zero is returned. On error, -1 is returned,
-   and [errno] is set appropriately.
-   (Reference: http://linux.die.net/man/2/chmod)
- */
-
 // called at line #296 of bbfs.c
 int my_chmod(const char *path, mode_t mode) {
 	ino_t fh = find_ino(path);
@@ -644,7 +527,6 @@ int my_chown(const char *path, uid_t uid, gid_t gid) {
 
 // called at line #331 of bbfs.c
 int my_truncate(const char *path, off_t newsize) {
-	//resize(path, newsize);
 	return an_err;  
 }  
 
@@ -660,7 +542,7 @@ int my_open( const char *path, int flags ) {
 
 	// If the file has been deleted
 	if(ilist.entry[fHandle].metadata.st_ino == DELETED) {
-		cout << "Error: attempting to open deleted file\n";
+		cerr << "Error: attempting to open deleted file\n";
 		cout << "Path: " << path << endl;
 
 		return -1;
@@ -700,7 +582,7 @@ int my_open( const char *path, int flags ) {
 		return fHandle;
 	}
 	else {
-		cout << "Error: file didn't open\n";
+		cerr << "Error: file didn't open\n";
 		cout << "Path: " << path << endl;
 
 		return -1;
@@ -710,31 +592,26 @@ int my_open( const char *path, int flags ) {
 
 // called at line #411 of bbfs.c  Note that our first arg is an fh not an fd
 int my_pread( int fHandle, char *buf, size_t size, off_t off ) {
-	//if the given off is larger than the files data return an error
+
 	if(off < 0 || ilist.entry[fHandle].data.size() < off) {
 		return an_err;
 	}   
-	//if the off is at the end of the file return 0
+
 	if(off == ilist.entry[fHandle].data.size() - 1) {
 		return 0;
 	}
 
 	mode_t m = ilist.entry[fHandle].metadata.st_mode;
 
-	//check file permissions before allowing the read
 	if(S_ISREG(m) && (m &  S_IRUSR)) {
-		//buf = new char[size + 1];
 		int i;  
-		//read data from file character by character
 		for(i = 0; i < size; i++) {
 			if(ilist.entry[fHandle].data[off + i] == '\0') {
 				cout << "data[off+i]: " << ilist.entry[fHandle].data[off + i] << endl;
 				break;
 			}
 			buf[i] = ilist.entry[fHandle].data[off + i];
-			//cout << buf[i] << " ";
 		}
-		//buf[i + 1] = '\0';
 		return i;
 	}
 	else {
@@ -886,7 +763,6 @@ int my_creat( const char *fpath, mode_t mode ) {
 		cout << "Path: " << fpath << endl;
 
 		return -1;
-		// return an_err;
 	}
 	return 0;
 }  
